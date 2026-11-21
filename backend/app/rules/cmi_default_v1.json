@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "template_code": "cmi_default_v1",
+  "expense_types": [
+    { "code": "business_trip", "label": "出差报销", "require_trip_reference": true },
+    { "code": "meal", "label": "日常餐费", "require_trip_reference": false }
+  ],
+  "categories": [
+    { "code": "EAT", "label": "餐费-正餐", "group": "餐费" },
+    { "code": "DRINK", "label": "餐费-饮品", "group": "餐费" },
+    { "code": "TRANS", "label": "交通费（仅限往返机场）", "group": "交通费" },
+    { "code": "Others", "label": "其他（含市内交通）", "group": "其他" },
+    { "code": "UNKNOWN", "label": "待分类", "group": "待分类" }
+  ],
+  "region_hierarchy": {
+    "in_scope": {
+      "label": "范围内",
+      "regions": [{ "code": "americas", "label": "美洲", "currencies": ["USD"] }]
+    },
+    "out_of_scope": {
+      "label": "范围外",
+      "regions": [
+        { "code": "mainland_cn", "label": "大陆", "currencies": ["CNY"] },
+        { "code": "hk", "label": "HK", "currencies": ["HKD"] },
+        { "code": "sg", "label": "新加坡", "currencies": ["SGD"] },
+        { "code": "other_overseas", "label": "其他", "currencies": ["*"] }
+      ]
+    },
+    "preserve_original_currency": true
+  },
+  "compliance_rules": {
+    "require_invoice_payment_closure": true,
+    "transit_direct_pay_exemptions": ["octopus_mtr", "credit_card_public_transit"],
+    "meal_split_for_multiple_diners": true,
+    "exclude_ride_hailing_tips": {
+      "enabled": true,
+      "providers": ["Uber", "Grab", "Taxi", "Lyft", "DiDi"],
+      "highlight_flag": "TIP_EXCLUDED"
+    },
+    "timezone_tolerance_days": 1,
+    "check_missing_airport_transfers": true,
+    "deduplicate_reshot_receipts": true,
+    "filter_irrelevant_files": true
+  },
+  "naming_and_export": {
+    "standard_pattern": "{category}_{date}_{currency}_{amount_hyphen}{role_suffix}.{ext}",
+    "airport_transfer_pattern": "TRANS_{direction}{iata}_{date}_{currency}_{amount_hyphen}{role_suffix}.{ext}",
+    "excel_group_levels": ["category_group", "region_scope", "region_detail_and_currency"],
+    "excel_filename_pattern": "{expense_type_label}汇总_{batch_date}.xlsx"
+  }
+}

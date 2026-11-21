@@ -1,0 +1,81 @@
+hats:
+  plan:
+    name: "📐 TryInvoice Planner"
+    backend:
+      command: ./ralph/claude.mjs
+      args: ["--model", "sonnet", "--effort", "high", "--stage", "plan"]
+    description: 依据当前 Task 文档拆解逻辑内聚、可独立验收的 Subtask。
+    triggers: [work.start, task.done, task.replan]
+    publishes: [spec.ready, review.accepted, LOOP_COMPLETE, loop.cancel]
+    instructions: >-
+      先完整读取 AGENTS.md、docs/hld.md、docs/lld.md、docs/milestones.md、当前 Task 文档和
+      .ralph/agent/task-progress.json（若存在）。运行配置包含多个顺序 Task 时，必须以进度文件中的
+      task_order、current_task 和各 Task 状态为准；同一时刻只规划一个当前 Task，前一 Task 未按其
+      验收标准关闭前不得进入下一 Task。拆分前必须运行 ralph-code-stats -t -s 查看历史规模；
+      若当前项目尚无历史快照，如实记录后再以 Task <=1500 行、Subtask 建议 <=800 行校准。
+      只做规划，不编写业务实现。把下一 Subtask 的编号、允许改动文件、接口、测试与验收口径写入
+      .ralph/agent/current-spec.md 后发布 spec.ready。仅在已核实 Critic 通过但 Finalizer 中断的
+      恢复场景发布 review.accepted。收到 task.done 后，先运行 ralph-stats --current（或等价只读查询）
+      核对刚结束的 Finalizer agent_run 已由包装器以 finalizer stage 入库，并核对对应代码量快照可回读；
+      这是包装器退出后的接棒检查，不得要求前一 Finalizer 在自身进程内预先读到自己的 agent_run。
+      两项均确认后才按 task_order 激活下一 Task；若真实缺失则记录证据并发布 loop.cancel，不得静默跳过。
+      仅当运行配置中的全部 Task 均已独立验收且无遗留工作时才发布 LOOP_COMPLETE。
+      收到 task.replan，或在 work.start 恢复时发现上一轮因 Spec 内部矛盾、白名单不足或前置条件定义错误
+      而取消，必须先修订 Subtask Spec 版本和允许范围再发布 spec.ready；这类 Spec 缺陷不计入 Builder
+      连续失败次数。若阻塞无法通过调整 Spec 解决，记录原因并发布 loop.cancel。
+    max_activations: 80
+
+  builder:
+    name: "⚙️ TryInvoice Builder"
+    backend:
+      command: ./ralph/opencode.mjs
+      args: ["--model", "openai/gpt-6-luna", "--effort", "high", "--stage", "builder"]
+    description: 严格按当前 Subtask Spec 实现并完成七项质量门禁。
+    triggers: [spec.ready, review.rejected]
+    publishes: [build.done, loop.cancel]
+    instructions: >-
+      严格按 .ralph/agent/current-spec.md 实施，只能修改 Spec 白名单内文件；不得修改
+      AGENTS.md、docs/hld.md、docs/lld.md、docs/milestones.md 或 docs/tasks/*.md，不得跨 Task 扩充，
+      不得写入或输出任何凭证。测试只保留核心纯逻辑单测和关键路径集成测试，满足 Test:Feat <=1.3
+      或新增测试少于450行之一。逐项实际运行或通过命令/diff 核查 tests、lint、typecheck、audit、
+      coverage、complexity、duplication；任一项未通过就先修复或发布 loop.cancel，严禁猜填。
+      全部通过后，build.done payload 必须以以下精确格式开头：tests: pass, lint: pass,
+      typecheck: pass, audit: pass, coverage: pass, complexity: <实测最大圈复杂度纯数字且<=10>,
+      duplication: pass. 无改动函数时 complexity 填0，严禁写 complexity: pass 或 <=10。
+    max_activations: 120
+
+  critic:
+    name: "🔍 TryInvoice Critic"
+    backend:
+      command: ./ralph/opencode.mjs
+      args: ["--model", "openai/gpt-6.2-sol", "--effort", "medium", "--stage", "critic"]
+    description: 独立按当前 Subtask Spec 验收，连续四次失败后交回 Planner。
+    triggers: [build.done]
+    publishes: [review.accepted, review.rejected, task.replan, loop.cancel]
+    instructions: >-
+      只按 .ralph/agent/current-spec.md 与当前 Task 的既定验收口径独立检查，不临时追加需求，
+      不修改业务源码。复核 build.done 七字段均有真实证据，独立运行相关测试、lint、类型检查和关键集成验证，
+      检查技术栈、范围、测试比例和凭证红线。通过发布 review.accepted；属于 Builder 可在当前 Spec 内
+      修复的实现缺陷，写入可复现证据并发布 review.rejected；若发现 Spec 自相矛盾、白名单不足以实现
+      Spec 强制要求，或前置条件需要 Planner 决策，必须立即发布 task.replan，不得先把同一不可能要求
+      交给 Builder 重试。实现缺陷连续第四次失败时也发布 task.replan，不再盲目重试。
+    max_activations: 120
+
+  finalizer:
+    name: "✅ TryInvoice Finalizer"
+    backend:
+      command: ./ralph/opencode.mjs
+      args: ["--model", "openai/gpt-6.2-sol", "--effort", "medium", "--stage", "finalizer"]
+    description: 记录验收结果、指标与代码量快照，并推进或完成当前 Task。
+    triggers: [review.accepted]
+    publishes: [task.done, LOOP_COMPLETE, loop.cancel]
+    instructions: >-
+      核对 Critic 证据和实际 diff，不在验收后修改业务源码。更新 .ralph/agent/task-progress.json，
+      保留当前 Task、Subtask 编号、结论、实测命令、代码行数和遗留限制；不得替 Planner 提前切换
+      Task 或把未完成 Task 标为已验收。执行 ralph-code-stats --record --baseline <subtaskId>
+      记录代码量快照并在当前进程内回读确认；快照失败必须如实记录并发布 loop.cancel。
+      当前 Finalizer 的 agent_run 由 opencode.mjs 包装器在模型进程退出、检测到交接事件后写入，
+      因此当前进程内读不到自身 agent_run 是正常时序，严禁仅以此为由发布 loop.cancel，也不得伪造或补写。
+      快照与进度登记成功后始终发布 task.done；下一次 Planner 接棒时负责核对本轮 Finalizer agent_run，
+      再判断继续生成下一份 Spec 还是发布 LOOP_COMPLETE。
+    max_activations: 80
