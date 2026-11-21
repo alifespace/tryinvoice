@@ -28,6 +28,8 @@ def _set_settings(
     settings = Settings(
         _env_file=None,
         supabase_jwt_secret=SecretStr(secret) if secret is not None else None,
+        supabase_jwt_issuer="https://synthetic.supabase.co/auth/v1",
+        supabase_allow_legacy_hs256=True,
         app_env=app_env,
         local_dev_user_id=local_user_id,
     )
@@ -38,6 +40,7 @@ def _token(user_id: UUID, *, secret: str = _TEST_SECRET, **claims: Any) -> str:
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "aud": "authenticated",
+        "iss": "https://synthetic.supabase.co/auth/v1",
         "exp": datetime.now(UTC) + timedelta(minutes=5),
         **claims,
     }
@@ -101,28 +104,25 @@ def test_invalid_bearer_is_401_without_local_fallback(
 ) -> None:
     client, users = batch_api
     _set_settings(monkeypatch, app_env="local", local_user_id=users[0])
-    claims: dict[str, Any] = {
-        "sub": str(users[0]),
-        "aud": "authenticated",
-        "exp": datetime.now(UTC) + timedelta(minutes=5),
-    }
-    signing_secret = _TEST_SECRET
-    if case == "expired":
-        claims["exp"] = datetime.now(UTC) - timedelta(minutes=1)
-    elif case == "wrong_signature":
-        signing_secret = "different-test-secret-not-a-real-credential"
-    elif case == "wrong_audience":
-        claims["aud"] = "another-audience"
-    elif case == "missing_sub":
+    claims = jwt.decode(_token(users[0]), options={"verify_signature": False})
+    claims.update(
+        {
+            "expired": {"exp": datetime.now(UTC) - timedelta(minutes=1)},
+            "wrong_audience": {"aud": "another-audience"},
+            "bad_sub": {"sub": "not-a-uuid"},
+        }.get(case, {})
+    )
+    if case == "missing_sub":
         claims.pop("sub")
-    elif case == "bad_sub":
-        claims["sub"] = "not-a-uuid"
-    if case == "none":
-        token = jwt.encode(claims, "", algorithm="none")
-    elif case == "malformed":
-        token = "malformed.test.token"
-    else:
-        token = jwt.encode(claims, signing_secret, algorithm="HS256")
+    algorithm, secret = {
+        "none": ("none", ""),
+        "wrong_signature": ("HS256", "different-test-secret-not-a-real-credential"),
+    }.get(case, ("HS256", _TEST_SECRET))
+    token = (
+        "malformed.test.token"
+        if case == "malformed"
+        else jwt.encode(claims, secret, algorithm=algorithm)
+    )
     if case == "no_secret":
         _set_settings(monkeypatch, secret=None, app_env="local", local_user_id=users[0])
 

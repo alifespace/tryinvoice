@@ -15,7 +15,7 @@ hats:
       .ralph/agent/m4-current-spec.md（建议<=5KB）；禁止把整份设计与历史复制进Spec。每次只规划一个
       Subtask，不写业务代码。Task建议<=2000行、Subtask建议<=800行。M4.1与M4.2的无副作用准备工作
       可依次推进；依赖真实外部回执的Task不得伪造accepted。收到task.replan后修订、重拆或推进其他
-      独立工作；同一阻塞项累计重规划4次仍未通过且整轮无其他工作时才可loop.cancel。若所有可执行
+      独立工作；同一阻塞项累计重规划9次仍未通过且整轮无其他工作时才可loop.cancel。若所有可执行
       工作均完成而只剩尚未授权的真实外部写入，应记录冻结候选、完整命令/参数、attempt前置与清理
       方案后loop.cancel安全停机，待同一配置--continue恢复。仅在M4.1-M4.7全部accepted后发布
       LOOP_COMPLETE。Scratchpad每轮覆写为<=4KB摘要。
@@ -56,7 +56,7 @@ hats:
       对真实外部操作必须先复核冻结候选、实际命令/参数、Free方案、Secret字段、attempt与清理方式；
       缺少真实回执时只能确认准备工作，不得接受要求真实部署、云端编译、真机或分享的最终验收项。
       通过发布review.accepted；实现缺陷发布review.rejected；Spec矛盾、白名单不足或前置回执缺失发布
-      task.replan；同一Subtask连续第4次真实拒绝必须task.replan。不得查询Metrics。Scratchpad每轮
+      task.replan；同一Subtask连续第6次真实拒绝必须task.replan。不得查询Metrics。Scratchpad每轮
       覆写为<=4KB摘要。
     max_activations: 160
 

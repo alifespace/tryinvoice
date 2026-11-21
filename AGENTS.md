@@ -77,7 +77,7 @@ tryinvoice/
 - `planner` 只能负责规划：读取当前 Task 文档、代码现状和权威进度账本，结合 Builder 能力，把当前一个 Task 拆成职责清楚、可独立验证的 Subtask，并写出允许/禁止改动路径、接口契约、不做范围和验收标准。Planner 禁止编写业务实现代码。
 - Task 规划建议不超过 2,000 行，Subtask 建议不超过 800 行；`.ralph/` 与 `logs/` 过程日志不计入业务代码量。拆分必须基于职责和可独立验收性，禁止仅为凑行数制造接口、重复测试或多轮交接。
 - `builder` 只能按当前 Subtask Spec 实现，禁止跨 Task 扩充、改变 HLD 技术栈或提前实现后续范围。
-- `critic` 只能按当前 Spec 验收，禁止临时加码。同一 Subtask 连续 4 次真实复核失败后，必须发布 `task.replan` 返回 Planner，禁止继续盲目重试。
+- `critic` 只能按当前 Spec 验收，禁止临时加码。同一 Subtask 连续 6 次真实复核失败后，必须发布 `task.replan` 返回 Planner，禁止继续盲目重试。
 - `finalizer` 使用确定性命令核验交付物、改动范围和行数，更新 `.ralph/agent/*-progress.json`。每个 Subtask 完成后发布 `task.done` 返回 Planner；只有整个 Milestone 全部 Task 均已验收，才可发布 `LOOP_COMPLETE`。
 - 标准事件固定为：
   - `plan`：`work.start`、`task.done`、`task.replan` → `spec.ready`、恢复专用 `review.accepted`、`LOOP_COMPLETE`、`loop.cancel`。
@@ -96,7 +96,7 @@ tryinvoice/
 
 ### 4.4 异常恢复与状态权威边界
 
-- 单个 Subtask 受阻不等于整个循环受阻。Planner 应依次判断：能否修正 Spec 后重新派发；能否重拆；能否暂时标记该项阻塞并推进同一 Milestone 内其他已授权且独立的工作。只有同一阻塞项在 Planner 侧累计重规划 4 次仍未通过，且整轮没有任何可执行事项时，才允许 `loop.cancel`。
+- 单个 Subtask 受阻不等于整个循环受阻。Planner 应依次判断：能否修正 Spec 后重新派发；能否重拆；能否暂时标记该项阻塞并推进同一 Milestone 内其他已授权且独立的工作。只有同一阻塞项在 Planner 侧累计重规划 9 次仍未通过，且整轮没有任何可执行事项时，才允许 `loop.cancel`。
 - 无副作用失败可在当前预算内修正后重试；已经发生外部写入或结果未知时，必须先对账，禁止盲目重试。
 - 涉及稀缺资源、真实外部操作或不可逆动作时，必须“先审后发”：Builder 先提交冻结候选、完整命令、参数、失败诊断与清理方式，Critic 复核，Finalizer 写入检查点后，再由 Planner 派发真实操作。
 - 发起真实或有副作用操作前，必须在 `.ralph/agent/*-progress.json` 写入版本、attempt ID 和检查点；执行后记录是否启动、结果及清理状态。无交付不计入 Critic 连续拒绝次数，真实复核失败才累计，结果未知则进入对账流程。

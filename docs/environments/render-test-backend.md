@@ -6,6 +6,7 @@
 - 服务类型：Docker Web Service，区域 Oregon，方案 Free（0 美元、512 MB）；Free 实例会休眠并可能冷启动，仅用于测试。
 - 仓库来源：Public Git Repository `alifespace/tryinvoice`。
 - 创建前必须在 Render 确认选择 Free，并再次核对最终费用为 0 美元；不得默认接受付费方案。
+- 容器入口每次启动会依次执行数据库迁移、幂等 seed，再启动 API；Render 的 Docker Command 留空，不配置 Docker Command 或 Pre-Deploy Command。Free 方案不提供 Pre-Deploy。
 - 本文件只记录候选步骤，不代表已经创建服务或授权执行。
 
 ## 2. Secret 名称与来源
@@ -16,7 +17,13 @@
 | --- | --- |
 | `DATABASE_URL` | Supabase 项目数据库连接设置；密码重置后使用新连接串 |
 | `SUPABASE_URL` | Supabase 项目 API 设置 |
-| `SUPABASE_JWT_SECRET` | Supabase 项目 JWT 设置 |
+| `SUPABASE_JWKS_URL` | 可选；默认由 `SUPABASE_URL` 推导 |
+| `SUPABASE_JWT_ISSUER` | 可选；默认由 `SUPABASE_URL` 推导 |
+| `SUPABASE_JWT_AUDIENCE` | 可选；默认 `authenticated` |
+| `SUPABASE_JWKS_CACHE_SECONDS` | 可选；默认 `600` |
+| `SUPABASE_JWKS_TIMEOUT_SECONDS` | 可选；默认 `3.0` |
+| `SUPABASE_ALLOW_LEGACY_HS256` | 可选；默认 `false`，仅迁移旧 HS256 时启用 |
+| `SUPABASE_JWT_SECRET` | 仅 `SUPABASE_ALLOW_LEGACY_HS256=true` 时需要；Supabase 项目 JWT 设置 |
 | `STORAGE_ENDPOINT_URL` | Supabase 项目 Storage/S3 设置 |
 | `STORAGE_BUCKET` | 经授权创建的 TryInvoice 专用私有 bucket 名称 |
 | `STORAGE_ACCESS_KEY_ID` | Supabase 项目 Storage/S3 设置 |
@@ -30,13 +37,7 @@
 2. 由项目所有者在 Supabase 完成数据库密码重置最终确认；将新凭证直接安全注入目标平台，不得复制到聊天或仓库。
 3. 创建 TryInvoice 专用测试用户及私有 Storage bucket。不得复用或改动 `floor-plans`、`project-renders`、旧 Auth 用户及旧数据。
 4. 在 Render 从 `render.yaml` 创建 Free Web Service，创建前复核费用，并通过 Dashboard 注入本手册所列变量。
-5. 在受控本地环境或一次性容器中配置 `DATABASE_URL`（仅写入本地未跟踪 `.env`），再执行：
-
-   ```bash
-   uv run --no-sync python -m app.db.migrate
-   uv run --no-sync python -m app.rules.seed
-   ```
-
+5. 保存平台环境变量并部署服务。容器入口自动依次运行数据库迁移与幂等 seed，成功后才启动 API；检查部署日志中的启动结果及健康检查。不得手工重复运行数据库迁移或 seed；如启动失败，先按日志诊断，不要盲目重试已有的真实操作。
 6. 授权后，在受控环境安全注入 `SMOKE_ACCESS_TOKEN`，运行合成数据冒烟：
 
    ```bash

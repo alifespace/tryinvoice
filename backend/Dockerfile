@@ -8,7 +8,9 @@ WORKDIR /app
 COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --locked --no-dev
+ENV PATH="/app/.venv/bin:$PATH"
 
+COPY --chmod=755 docker-entrypoint.sh ./docker-entrypoint.sh
 COPY app/ ./app/
 COPY migrations/ ./migrations/
 
@@ -19,4 +21,5 @@ USER app
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
-CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -21,6 +21,14 @@ services:
         sync: false
       - key: SUPABASE_URL
         sync: false
+      - key: SUPABASE_JWT_AUDIENCE
+        value: authenticated
+      - key: SUPABASE_JWKS_CACHE_SECONDS
+        value: "600"
+      - key: SUPABASE_JWKS_TIMEOUT_SECONDS
+        value: "3.0"
+      - key: SUPABASE_ALLOW_LEGACY_HS256
+        value: "false"
       - key: SUPABASE_JWT_SECRET
         sync: false
       - key: STORAGE_ENDPOINT_URL

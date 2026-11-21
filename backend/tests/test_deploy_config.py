@@ -42,15 +42,15 @@ def test_dockerfile_uses_pinned_images_and_safe_runtime() -> None:
     assert "HEALTHCHECK" in dockerfile
     assert "/api/v1/health" in dockerfile
 
+
+def test_dockerfile_cmd_and_secret_hygiene() -> None:
+    dockerfile = (BACKEND_DIR / "Dockerfile").read_text()
     cmd_line = next(
         line.removeprefix("CMD ").strip()
         for line in dockerfile.splitlines()
         if line.startswith("CMD ")
     )
     assert json.loads(cmd_line) == [
-        "uv",
-        "run",
-        "--no-sync",
         "uvicorn",
         "app.main:app",
         "--host",

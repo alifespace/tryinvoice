@@ -182,6 +182,18 @@
 - **范围与约束**：只提交可审查的部署声明、脱敏环境变量清单和合成数据冒烟脚本；真实 Render 服务创建、GitHub 授权和 Secrets 注入须先登记 attempt ID 并经项目所有者授权。禁止生产数据和真实票据。
 - **验收标准**：远端健康检查、鉴权拒绝、测试账号鉴权以及合成数据最小 API 链路通过；仓库和日志不含凭证。
 
+### `M4.1-fix-deployment-bootstrap`：测试容器确定性启动与自动初始化
+- **目标**：修复 Render Docker Command 不解释复合 shell 命令导致迁移后进程退出的问题，建立自动执行迁移、seed 并常驻启动 Uvicorn 的单一容器入口。
+- **前置依赖**：`M4.1-test-backend-environment` 的真实迁移、seed 与部署诊断证据。
+- **范围与约束**：只修复 Docker 启动、初始化顺序、失败退出与信号传递；不修改认证、业务 API、表结构或 iOS 客户端。预估约 330 行（功能/配置 180、测试 150）。
+- **验收标准**：冷启动和重复启动均可自动完成幂等初始化并进入 Live；任一初始化步骤失败时 API 不启动，日志不泄露凭证。
+
+### `M4.1-fix-supabase-jwks-auth`：Supabase ES256/JWKS 鉴权兼容
+- **目标**：支持 Supabase 新版 ECC P-256 / ES256 Token 与 JWKS 密钥轮换，完成真实测试账号鉴权门禁。
+- **前置依赖**：`M4.1-fix-deployment-bootstrap`。
+- **范围与约束**：使用成熟 JWKS 能力验证签名、算法、issuer、audience、过期时间和 subject；实现有界缓存、超时、轮换刷新与脱敏错误边界。预估约 650 行（功能 350、测试 300）。
+- **验收标准**：有效 Token 能访问受保护 API，异常 Token 均被拒绝，跨租户隔离保持有效；真实鉴权和合成数据最小 API 冒烟通过。
+
 ### `M4.2-ios-project-scaffold-and-ci`：SwiftUI 工程骨架与真实云端编译
 - **目标**：使用 XcodeGen 创建 iOS 17+ SwiftUI 工程、共享 Scheme、基础导航与测试 Target，并让现有 GitHub Actions 执行真实构建和模拟器测试。
 - **前置依赖**：`M3.3-ios-cloud-ci-foundation`。
@@ -190,7 +202,7 @@
 
 ### `M4.3-ios-auth-network-and-account`：Supabase 登录、契约网络层与账号管理
 - **目标**：实现单账号邮箱/密码登录、会话恢复与刷新、OpenAPI 强类型网络层、Bearer JWT 注入及账号删除入口。
-- **前置依赖**：`M4.1-test-backend-environment`、`M4.2-ios-project-scaffold-and-ci`。
+- **前置依赖**：`M4.1-test-backend-environment`、`M4.1-fix-deployment-bootstrap`、`M4.1-fix-supabase-jwks-auth`、`M4.2-ios-project-scaffold-and-ci`。
 - **范围与约束**：优先复用官方 Supabase Swift 与 Swift OpenAPI 工具链；不提供公开注册、团队或多账号切换；测试密码只存 GitHub/平台 Secrets。
 - **验收标准**：模拟器可登录测试账号、重启恢复会话、访问受保护 API，并在未认证或 Token 失效时进入可恢复登录状态。
 

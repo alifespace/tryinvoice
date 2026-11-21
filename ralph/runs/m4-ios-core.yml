@@ -1,4 +1,4 @@
-# 一条 Ralph 管线覆盖 M4.1-M4.7；人工门禁后使用同一配置 --continue。
+# 一条 Ralph 管线覆盖 M4.1 修复与 M4.1-M4.7；人工门禁后使用同一配置 --continue。
 cli:
   backend: custom
   command: ./ralph/claude.mjs
@@ -24,10 +24,10 @@ core:
   guardrails:
     - 业务边界以AGENTS.md、docs/milestones.md、当前M4 Task文档、docs/environments/test-environment.md及相关设计章节为准；同一时刻只允许一个Task和一个Subtask为active。
     - 使用<=5KB轻量热账本m4-progress.json、<=5KB当前Spec、<=4KB滚动scratchpad；详细证据外置到.ralph/agent/archive/m4/，下游Hat禁止每轮全量重读项目文档。
-    - 目标顺序为M4.1到M4.7；M4.1与M4.2无副作用准备工作可独立推进，M4.3及以后必须满足Task前置依赖；M4未全部accepted不得发布LOOP_COMPLETE。
+    - 恢复顺序为M4.1真实证据对账、M4.1-fix-deployment-bootstrap、M4.1-fix-supabase-jwks-auth、M4.1/M4.2收尾、M4.3到M4.7；M4.3必须等待两个修复Task与M4.1/M4.2全部accepted；M4未全部accepted不得发布LOOP_COMPLETE。
     - Task建议<=2000行、Subtask建议<=800行；测试满足Test:Feat<=1.3或新增测试<450，估算不得被误作额外硬门禁。
-    - Builder遇Spec、前置、白名单、代码量或复杂度冲突必须task.replan；Planner累计重规划4次且整轮无其他工作时才可loop.cancel。
-    - 真实外部写入严格先审后发：未获本轮明确授权时，Supabase密码重置、用户/bucket/迁移、Render服务、GitHub推送/Actions、真实API费用、真机权限与对外分享均只允许准备冻结候选，禁止实施或伪造回执。
+    - Builder遇Spec、前置、白名单、代码量或复杂度冲突必须task.replan；同一Subtask连续被Critic拒绝6次必须task.replan；Planner累计重规划9次且整轮无其他工作时才可loop.cancel。
+    - 真实外部写入严格先审后发：已有Render与GitHub回执只能读取对账、不得重复执行；未获本轮明确授权时，Supabase密码重置、用户/bucket/迁移、Render变更、GitHub推送/Actions、真实API费用、真机权限与对外分享均只允许准备冻结候选，禁止实施或伪造回执。
     - 人工门禁只剩唯一阻塞时，热账本须记录waiting_manual、冻结候选、完整待执行参数、attempt前置和清理方式，再loop.cancel安全停机；取得回执后使用同一配置--continue恢复。
     - API Key、Token、密码、签名文件、原始票据、完整OCR文本和预签名URL不得进入仓库、日志、事件、scratchpad、冷归档或制品。
     - 默认使用合成或彻底脱敏数据；客户端不得复制服务端确定性业务规则，原始凭证不可变。

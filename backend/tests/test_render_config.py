@@ -17,6 +17,7 @@ SECRET_VARS = {
     "STORAGE_SECRET_ACCESS_KEY",
 }
 PLATFORM_VARS = {"PORT"}
+OPTIONAL_DERIVED_VARS = {"SUPABASE_JWKS_URL", "SUPABASE_JWT_ISSUER"}
 
 
 def _render_env_vars() -> list[tuple[str, str, str]]:
@@ -64,26 +65,28 @@ def test_render_config_has_no_unsupported_or_implicit_deploy_settings() -> None:
 
 
 def test_render_env_vars_match_settings_and_platform_contract() -> None:
-    fields = {field.upper() for field in Settings.model_fields}
+    fields = set(map(str.upper, Settings.model_fields))
     assert PLATFORM_VARS == {"PORT"} and fields.isdisjoint(PLATFORM_VARS)
     assert "LOCAL_DEV_USER_ID" in fields
-    expected = (fields - {"LOCAL_DEV_USER_ID"}) | PLATFORM_VARS
+    expected = (fields - {"LOCAL_DEV_USER_ID"} - OPTIONAL_DERIVED_VARS) | PLATFORM_VARS
     env_vars = _render_env_vars()
     names = [name for name, _, _ in env_vars]
-    assert len(names) == len(set(names)) and set(names) == expected
+    assert sorted(names) == sorted(expected)
     assert "LOCAL_DEV_USER_ID" not in RENDER_CONFIG
-
     declarations = {name: (kind, value) for name, kind, value in env_vars}
-    assert declarations["APP_ENV"] == ("value", "staging")
-    assert declarations["PORT"] == ("value", '"8000"')
-    assert declarations["STORAGE_REGION"] == ("value", "auto")
-    assert declarations["STORAGE_PRESIGN_TTL_SECONDS"] == ("value", '"900"')
+    default_keys = "APP_ENV PORT STORAGE_REGION STORAGE_PRESIGN_TTL_SECONDS".split()
+    assert tuple(map(declarations.__getitem__, default_keys)) == (
+        ("value", "staging"),
+        ("value", '"8000"'),
+        ("value", "auto"),
+        ("value", '"900"'),
+    )
     assert {
         name
         for name, (kind, value) in declarations.items()
         if kind == "sync" and value == "false"
     } == SECRET_VARS
-    assert all(declarations[name] == ("sync", "false") for name in SECRET_VARS)
+    assert not re.search(r"SUPABASE_(?:JWKS_URL|JWT_ISSUER)", RENDER_CONFIG)
 
 
 def test_render_manual_lists_secrets_and_preserves_existing_resources() -> None:
