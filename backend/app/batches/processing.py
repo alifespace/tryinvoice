@@ -1,9 +1,10 @@
-from typing import Literal, cast
+from typing import Literal
 from uuid import UUID
 
 from psycopg import Connection
 from pydantic import BaseModel, ConfigDict
 
+from app.batches.jobs import start_job
 from app.batches.pipeline import (
     ExtractionCounts,
     build_drafts,
@@ -18,7 +19,6 @@ from app.storage import ObjectStorage
 
 _ERROR = "批次处理失败。"
 _OWNED_BATCH = "SELECT 1 FROM public.reimbursement_batches WHERE id=%s AND user_id=%s"
-_START_JOB = "INSERT INTO public.jobs (user_id,batch_id,job_type,status) VALUES (%s,%s,'process_batch','running') RETURNING id"  # noqa: E501
 _LOCK_BATCH = "SELECT template_id FROM public.reimbursement_batches WHERE id=%s AND user_id=%s FOR UPDATE"  # noqa: E501
 _FAIL_JOB = "UPDATE public.jobs SET status='failed',error_message=%s,updated_at=now() WHERE id=%s"  # noqa: E501
 
@@ -39,10 +39,7 @@ class ProcessOut(BaseModel):
 def _start_job(conn: Connection, user_id: UUID, batch_id: UUID) -> UUID:
     if conn.execute(_OWNED_BATCH, (batch_id, user_id)).fetchone() is None:
         raise BatchNotFound
-    row = conn.execute(_START_JOB, (user_id, batch_id)).fetchone()
-    if row is None:  # pragma: no cover - INSERT RETURNING always yields a row here.
-        raise RuntimeError(_ERROR)
-    return cast(UUID, row[0])
+    return start_job(conn, user_id, batch_id, "process_batch")
 
 
 def _load_template(conn: Connection, template_id: UUID) -> RuleTemplateDSL:

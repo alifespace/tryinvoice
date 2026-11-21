@@ -7,6 +7,7 @@ from typing import Protocol
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
+from uuid import UUID
 
 from app.config import Settings
 
@@ -21,6 +22,10 @@ class StorageError(Exception):
 
 class ObjectStorage(Protocol):
     def presign_put(self, key: str) -> tuple[str, int]: ...
+
+    def put(self, key: str, data: bytes, content_type: str) -> None: ...
+
+    def presign_get(self, key: str) -> tuple[str, int]: ...
 
     def head_size(self, key: str) -> int | None: ...
 
@@ -135,6 +140,24 @@ class S3Storage:
     def presign_put(self, key: str) -> tuple[str, int]:
         return self._url("PUT", key), self._settings.storage_presign_ttl_seconds
 
+    def put(self, key: str, data: bytes, content_type: str) -> None:
+        url = self._url("PUT", key)
+        request = Request(
+            url,
+            data=data,
+            method="PUT",
+            headers={"Content-Type": content_type},
+        )
+        try:
+            with urlopen(request, timeout=10) as response:
+                if response.status not in {200, 201, 204}:
+                    raise StorageError
+        except HTTPError, OSError:
+            raise StorageError from None
+
+    def presign_get(self, key: str) -> tuple[str, int]:
+        return self._url("GET", key), self._settings.storage_presign_ttl_seconds
+
     def _request(self, method: str, key: str) -> tuple[int, Message[str, str]]:
         url = self._url(method, key)
         try:
@@ -179,3 +202,7 @@ class S3Storage:
         status, _ = self._request("DELETE", key)
         if status not in {200, 204, 404}:
             raise StorageError
+
+
+def export_storage_key(user_id: UUID, batch_id: UUID, job_id: UUID) -> str:
+    return f"{user_id}/{batch_id}/exports/{job_id}.zip"

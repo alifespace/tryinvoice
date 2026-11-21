@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from psycopg import Connection
 
 from app.api.deps import get_conn, get_current_user_id, get_extractor, get_storage
+from app.batches.jobs import JobConflict
 from app.batches.processing import ProcessOut, process_batch
 from app.batches.service import BatchNotFound
 from app.extraction.models import DocumentExtractorProtocol
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/batches", tags=["processing"])
     responses={
         401: {"description": "未认证"},
         404: {"description": "批次不存在"},
+        409: {"description": "任务正在执行"},
         500: {"description": "批次处理失败"},
     },
 )
@@ -33,5 +35,9 @@ def post_process(
         return process_batch(conn, storage, extractor, user_id, batch_id)
     except BatchNotFound as error:
         raise HTTPException(status_code=404, detail="批次不存在") from error
+    except JobConflict as error:
+        raise HTTPException(
+            status_code=409, detail="任务正在执行，请稍后重试"
+        ) from error
     except Exception:
         raise HTTPException(status_code=500, detail="批次处理失败") from None

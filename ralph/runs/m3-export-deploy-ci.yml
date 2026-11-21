@@ -1,0 +1,36 @@
+# 一条 Ralph loop 连续完成 M3.1、M3.2、M3.3。
+cli:
+  backend: custom
+  command: ./ralph/claude.mjs
+  args: ["--model", "sonnet", "--effort", "high", "--stage", "plan"]
+  prompt_mode: arg
+
+event_loop:
+  prompt_file: ralph/prompts/m3-export-deploy-ci.md
+  starting_event: work.start
+  completion_promise: LOOP_COMPLETE
+  cancellation_promise: loop.cancel
+  required_events: [spec.ready, build.done, review.accepted, task.done]
+  max_iterations: 300
+  max_runtime_seconds: 86400
+  max_consecutive_failures: 4
+  persistent: false
+  enforce_hat_scope: true
+
+core:
+  scratchpad:
+    enabled: true
+    path: .ralph/agent/m3-rolling-scratchpad.md
+  guardrails:
+    - 业务边界以AGENTS.md、docs/milestones.md、当前M3 Task文档及相关设计章节为准；同一时刻只允许一个Task和一个Subtask为active。
+    - 使用<=5KB轻量热账本m3-progress.json、<=5KB当前Spec、<=4KB滚动scratchpad；详细验收证据外置到.ralph/agent/archive/m3/，下游Hat禁止每轮全量重读项目文档。
+    - 依次完成M3.1、M3.2、M3.3；前一Task未通过Critic与Finalizer不得进入下一Task，M3未全部完成不得发布LOOP_COMPLETE。
+    - Task建议<=2000行、Subtask建议<=800行；测试满足Test:Feat<=1.3或新增测试<450，估算不得被误作额外硬门禁。
+    - Builder遇Spec、前置、白名单、代码量或复杂度冲突必须task.replan；Planner累计重规划4次且整轮无其他工作时才可loop.cancel。
+    - 默认使用Mock、本地临时环境或明确测试环境；真实外部写入前必须先记录attempt ID与检查点并对账，严禁擅自创建公开仓库或消耗生产资源。
+    - API Key、Token、密码、签名文件、原始票据和其他敏感信息不得进入仓库、日志、事件或制品。
+    - Metrics完全解耦；任何Hat不得查询、等待或验证Metrics，也不得因观测失败阻塞流程。
+    - 只使用work.start、spec.ready、build.done、review.accepted、review.rejected、task.replan、task.done、LOOP_COMPLETE、loop.cancel。
+
+memories:
+  enabled: false

@@ -1,0 +1,68 @@
+hats:
+  plan:
+    name: "📐 TryInvoice Lean Planner"
+    backend:
+      command: ./ralph/claude.mjs
+      args: ["--model", "sonnet", "--effort", "high", "--stage", "plan"]
+    description: 编译当前 Task 的最小上下文并拆解可独立验收的 Subtask。
+    triggers: [work.start, task.done, task.replan]
+    publishes: [spec.ready, review.accepted, LOOP_COMPLETE, loop.cancel]
+    instructions: >-
+      以 .ralph/agent/m3-progress.json 为轻量热账本（建议<=5KB），只保留状态枚举、唯一 active 指针、
+      最近检查点、失败/重规划计数和冷归档路径。首次进入或切换新 Task 时，按需读取 AGENTS.md、
+      docs/milestones.md、当前 docs/tasks/M3.*.md 及相关设计章节，把白名单、契约、不做范围、预算和
+      验证命令编译到 .ralph/agent/m3-current-spec.md（建议<=5KB）；禁止把整份设计与历史复制进 Spec。
+      每次只规划一个 Subtask，不写业务代码。Task建议<=2000行、Subtask建议<=800行；估算不是低于
+      硬上限的额外门禁。收到 task.replan 后在热账本累计次数并修订、重拆或推进其他独立工作；同一
+      阻塞项累计重规划4次仍未通过且整轮无其他工作时才可 loop.cancel。仅在 M3.1-M3.3 全部 accepted
+      后发布 LOOP_COMPLETE。Scratchpad 每轮覆写为<=4KB滚动摘要，不得追加无界历史。
+    max_activations: 80
+
+  builder:
+    name: "⚙️ TryInvoice Lean Builder"
+    backend:
+      command: ./ralph/opencode.mjs
+      args: ["--model", "openai/gpt-6-luna", "--effort", "high", "--stage", "builder"]
+    description: 仅按精简 Spec 实现并完成七项真实门禁。
+    triggers: [spec.ready, review.rejected]
+    publishes: [build.done, task.replan, loop.cancel]
+    instructions: >-
+      默认只读取当前 Spec、m3-progress 热指针、最近检查点、白名单源码与必要证据引用；禁止每轮全量
+      重读 AGENTS/HLD/LLD/Milestones。严格按白名单实现，不跨 Task、不改设计文档。测试满足
+      Test:Feat<=1.3或新增测试<450。逐项真实运行 tests、lint、typecheck、audit、coverage、complexity、
+      duplication；全部通过后 build.done 必须以 tests: pass, lint: pass, typecheck: pass, audit: pass,
+      coverage: pass, complexity: <实测最大圈复杂度纯数字且<=10>, duplication: pass. 开头。自身发现
+      Spec、前置、白名单、代码量或复杂度无法同时满足时，记录实测证据并发布 task.replan，禁止直接
+      loop.cancel。不得读取或依赖 Metrics。Scratchpad 每轮覆写为<=4KB摘要。
+    max_activations: 120
+
+  critic:
+    name: "🔍 TryInvoice Lean Critic"
+    backend:
+      command: ./ralph/opencode.mjs
+      args: ["--model", "openai/gpt-6.2-sol", "--effort", "medium", "--stage", "critic"]
+    description: 仅按当前 Spec 独立复验，不重复加载全量历史。
+    triggers: [build.done]
+    publishes: [review.accepted, review.rejected, task.replan, loop.cancel]
+    instructions: >-
+      默认只读取当前 Spec、热指针、最近检查点、白名单 diff 与必要证据；禁止每轮全量重读项目文档。
+      独立复验七项门禁、范围、契约、测试比例、安全与关键集成路径，不追加需求、不修改业务源码。
+      通过发布 review.accepted；Spec内实现缺陷发布 review.rejected；Spec矛盾或白名单不足发布task.replan；
+      同一Subtask连续第4次真实拒绝必须task.replan。不得查询Metrics。Scratchpad每轮覆写为<=4KB摘要。
+    max_activations: 120
+
+  finalizer:
+    name: "✅ TryInvoice Lean Finalizer"
+    backend:
+      command: ./ralph/opencode.mjs
+      args: ["--model", "openai/gpt-6.2-sol", "--effort", "medium", "--stage", "finalizer"]
+    description: 确定性收尾，将详细证据写入冷归档并保持热账本轻量。
+    triggers: [review.accepted]
+    publishes: [task.done, LOOP_COMPLETE, loop.cancel]
+    instructions: >-
+      默认只读取当前Spec、热指针、Critic最近检查点和白名单diff；不得全量重读历史。确定性复核后，
+      将命令输出、Diff统计、行数、覆盖率与验收报告写入 .ralph/agent/archive/m3/<subtask>.md；
+      m3-progress.json只更新状态、唯一active指针、最近检查点和冷归档路径并保持建议<=5KB，不嵌入详细
+      证据。当前Subtask完成发布task.done，由Planner推进；不得自行提前切Task。不得依赖Metrics。
+      Scratchpad每轮覆写为<=4KB摘要。
+    max_activations: 80
