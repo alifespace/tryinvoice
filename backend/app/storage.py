@@ -24,6 +24,8 @@ class ObjectStorage(Protocol):
 
     def head_size(self, key: str) -> int | None: ...
 
+    def get(self, key: str) -> bytes | None: ...
+
     def delete(self, key: str) -> None: ...
 
 
@@ -155,6 +157,22 @@ class S3Storage:
                 raise ValueError
             return int(size)
         except AttributeError, ValueError:
+            raise StorageError from None
+
+    def get(self, key: str) -> bytes | None:
+        url = self._url("GET", key)
+        try:
+            with urlopen(Request(url, method="GET"), timeout=10) as response:
+                if response.status == 404:
+                    return None
+                if response.status != 200:
+                    raise StorageError
+                return bytes(response.read())
+        except HTTPError as error:
+            if error.code == 404:
+                return None
+            raise StorageError from None
+        except OSError, ValueError:
             raise StorageError from None
 
     def delete(self, key: str) -> None:

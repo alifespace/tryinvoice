@@ -9,6 +9,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from psycopg import Connection
 
 from app.config import get_settings
+from app.extraction.models import DocumentExtractorProtocol
+from app.extraction.tier1 import DeterministicExtractor
 from app.storage import ObjectStorage, S3Storage
 
 _bearer = HTTPBearer(auto_error=False)
@@ -74,3 +76,7 @@ def get_conn() -> Iterator[Connection]:
 
 def get_storage() -> ObjectStorage:
     return S3Storage(get_settings())
+
+
+def get_extractor() -> DocumentExtractorProtocol:
+    return DeterministicExtractor()

@@ -1,0 +1,41 @@
+# M2 第二次恢复循环：保留 M2.4 与 M2.5-S1 验收结果，从 M2.5-S2 重规划并完成 M2。
+cli:
+  backend: custom
+  command: ./ralph/claude.mjs
+  args: ["--model", "sonnet", "--effort", "high", "--stage", "plan"]
+  prompt_mode: arg
+
+event_loop:
+  prompt_file: ralph/prompts/m2-core-processing-resume.md
+  starting_event: work.start
+  completion_promise: LOOP_COMPLETE
+  cancellation_promise: loop.cancel
+  required_events: [spec.ready, build.done, review.accepted, task.done]
+  max_iterations: 300
+  max_runtime_seconds: 86400
+  max_consecutive_failures: 4
+  persistent: false
+  enforce_hat_scope: true
+
+core:
+  scratchpad:
+    enabled: true
+    path: .ralph/agent/m2-core-processing-resume-scratchpad.md
+  guardrails:
+    - 每个 Hat 开始前读取 AGENTS.md、M2 设计与 Task 文档、M2 权威进度账本、当前 Spec、既有阻塞证据和实际代码；业务需求与 Task 顺序以最新 docs 为准。
+    - 本次是旧循环 loop.cancel 后的新恢复循环，不复用旧事件队列；保留 M2.1-M2.4 与 M2.5-S1 的全部验收结论，只从 M2.5-S2 继续，禁止重做或回退已验收范围。
+    - M2.5-S2 当前候选尚未验收，必须保留并重新规划；候选相对 S2 基线净增功能256、测试170、合计426，复杂度最大15，均须在新 Spec 下继续核验与修复。
+    - M2.5 的约1000行只是专业估算，不是门禁；Task总改动量硬上限为2000行。S1已用246行，因此S2剩余硬预算为1754行；单个Subtask建议不超过800行，Planner应按现有候选与复杂度重构需要合理分配并保留余量，禁止从估算值中重复扣减返工余量。
+    - Builder 自身发现 Spec 边界、前置条件、白名单、代码量或复杂度门禁无法同时满足时，必须携带实测证据发布 task.replan 交回 Planner，禁止直接 loop.cancel。
+    - Planner 收到 task.replan 后优先调整 Spec、重拆或推进其他独立授权事项；只有同一阻塞项累计重规划4次仍未通过且整轮无其他可执行事项时才允许 loop.cancel。
+    - 同一时刻只允许一个 Task、一个 Subtask 为 active；每个 Subtask 必须经过 Builder 七项门禁、Critic 独立复验和 Finalizer 确定性收尾。
+    - 严禁修改 AGENTS.md、docs/hld.md、docs/lld.md、docs/milestones.md 和 docs/tasks/*.md；禁止实施 M3-M5。
+    - 测试满足 Test:Feat <=1.3 或新增测试少于450行之一；只保留核心纯逻辑单测与关键路径集成测试，禁止重复堆叠。
+    - 外部 OpenAI、Supabase 与对象存储默认只用 Mock、临时本地环境或明确测试环境，不得擅自消耗真实 API credit。
+    - API Key、JWT、数据库密码、个人票据和其他敏感信息不得进入仓库、日志、事件或报告。
+    - Metrics 是非侵入式观测平面；任何 Hat 均不得查询、等待或验证 Metrics，也不得因观测日志失败而取消循环。
+    - 所有事件参数、测试结果、代码行数与验收结论必须来自实际执行，不得预填、猜测或伪造。
+    - 不发明工作流事件；只使用 work.start、spec.ready、build.done、review.accepted、review.rejected、task.replan、task.done、LOOP_COMPLETE、loop.cancel。
+
+memories:
+  enabled: false

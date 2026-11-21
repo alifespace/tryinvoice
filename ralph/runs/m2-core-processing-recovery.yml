@@ -1,0 +1,40 @@
+# M2 拆分后的全新恢复循环：保留既有验收证据，迁移到 M2.4、M2.5；不得 --continue 旧 loop.cancel。
+cli:
+  backend: custom
+  command: ./ralph/claude.mjs
+  args: ["--model", "sonnet", "--effort", "high", "--stage", "plan"]
+  prompt_mode: arg
+
+event_loop:
+  prompt_file: ralph/prompts/m2-core-processing-recovery.md
+  starting_event: work.start
+  completion_promise: LOOP_COMPLETE
+  cancellation_promise: loop.cancel
+  required_events: [spec.ready, build.done, review.accepted, task.done]
+  max_iterations: 300
+  max_runtime_seconds: 86400
+  max_consecutive_failures: 4
+  persistent: false
+  enforce_hat_scope: true
+
+core:
+  scratchpad:
+    enabled: true
+    path: .ralph/agent/m2-core-processing-recovery-scratchpad.md
+  guardrails:
+    - 每个 Hat 开始前读取 AGENTS.md、M2 设计与 Task 文档、M2 权威进度账本、当前 Spec 和实际代码；业务需求与 Task 顺序以最新 docs 为准。
+    - 本次是新恢复循环，不复用已取消循环的事件队列；先对账并迁移账本，再依次完成 M2.4、M2.5，禁止重做已验收的 M2.1、M2.2、M2.3-S1/S2。
+    - 原 M2.3-S3 的 676 行候选代码未验收，只能作为 M2.4 候选继续重构与验收，不得标记为既有完成成果，也不得无依据丢弃。
+    - 同一时刻只允许一个 Task、一个 Subtask 为 active；前一 Task 未经 Critic 与 Finalizer 独立验收，不得进入下一 Task。
+    - 严禁修改 AGENTS.md、docs/hld.md、docs/lld.md、docs/milestones.md 和 docs/tasks/*.md；禁止实施 M3-M5。
+    - 每个 Task 总改动量 <=2000 行，Subtask 建议 <=800 行；M2.4、M2.5 还须分别遵守自身 Task 文档中的计划预算与返工余量。
+    - 测试满足 Test:Feat <=1.3 或新增测试少于450行之一；只保留核心纯逻辑单测与关键路径集成测试，禁止重复堆叠。
+    - 所有确定性业务规则必须由程序实现；外部 OpenAI、Supabase 与对象存储默认只用 Mock、临时本地环境或明确测试环境，不得擅自消耗真实 API credit。
+    - API Key、JWT、数据库密码、个人票据和其他敏感信息不得进入仓库、日志、事件或报告。
+    - Metrics 是非侵入式观测平面；任何 Hat 均不得查询、等待或验证 Metrics，也不得因观测日志失败而取消循环。
+    - 所有事件参数、测试结果、代码行数与验收结论必须来自实际执行，不得预填、猜测或伪造。
+    - 单步受阻时优先修订 Spec、重拆或推进其他独立授权事项；只有整轮无任何可执行事项才允许 loop.cancel。
+    - 不发明工作流事件；只使用 work.start、spec.ready、build.done、review.accepted、review.rejected、task.replan、task.done、LOOP_COMPLETE、loop.cancel。
+
+memories:
+  enabled: false
