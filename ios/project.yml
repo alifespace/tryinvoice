@@ -1,0 +1,63 @@
+name: TryInvoice
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  bundleIdPrefix: com.tryinvoice
+  createIntermediateGroups: true
+configs:
+  Debug: debug
+  Release: release
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+targets:
+  TryInvoice:
+    type: application
+    platform: iOS
+    sources:
+      - path: TryInvoice
+    configFiles:
+      Debug: Config/Debug.xcconfig
+      Release: Config/Release.xcconfig
+    info:
+      path: build/Info.plist
+      properties:
+        API_BASE_URL: "$(API_BASE_URL)"
+        UILaunchScreen: {}
+  TryInvoiceTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: TryInvoiceTests
+    dependencies:
+      - target: TryInvoice
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+        PRODUCT_BUNDLE_IDENTIFIER: com.tryinvoice.TryInvoiceTests
+  TryInvoiceUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: TryInvoiceUITests
+    dependencies:
+      - target: TryInvoice
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+        PRODUCT_BUNDLE_IDENTIFIER: com.tryinvoice.TryInvoiceUITests
+schemes:
+  TryInvoice:
+    build:
+      targets:
+        TryInvoice: all
+    test:
+      config: Debug
+      targets:
+        - TryInvoiceTests
+        - TryInvoiceUITests
+    management:
+      shared: true

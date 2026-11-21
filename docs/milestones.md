@@ -11,7 +11,7 @@
 | **M1：基础底座、契约与数据模型** | 完成仓库初始化、Supabase 数据库 Schema（含 `user_id` + RLS）、FastAPI 骨架与 OpenAPI 3.1 契约，预置 CMI 默认规则模板 | `M1.1`（保留已验收骨架）、`M1.4`、`M1.2`、`M1.3` |
 | **M2：确定性规则引擎与单据识别管线** | 实现分层要素提取、确定性规则引擎、增量批处理管线及交易复核 API | `M2.1`、`M2.2`、`M2.3`、`M2.4`、`M2.5` |
 | **M3：标准化导出引擎、完整后端闭环与 iOS 云端 CI 底座** | 实现 `openpyxl` 三级分组 Excel 生成器、规范重命名与 ZIP 打包导出、异步任务队列与集成测试，并建立无需本机完整 Xcode 的 GitHub Actions macOS 构建环境 | `M3.1`、`M3.2`、`M3.3` |
-| **M4：iOS 客户端核心应用（采集→复核→导出）** | 完成 SwiftUI iOS App：离线拍照/导入、后台直传、批次与交易复核、异常高亮处理、模板查看/派生、ZIP 分享导出 | `M4.1`、`M4.2`、`M4.3`、`M4.4` |
+| **M4：测试环境与 iOS 客户端核心应用（采集→复核→导出）** | 建立低成本测试后端，并完成 SwiftUI iOS App：登录、离线存储、拍照/导入、后台直传、批次与交易复核、模板管理、ZIP 分享导出 | `M4.1`、`M4.2`、`M4.3`、`M4.4`、`M4.5`、`M4.6`、`M4.7` |
 | **M5：Share Extension、稳定性打磨与 App Store 上架** | 完成系统分享扩展（微信/PDF 一键导入）、真实票据端到端验收、隐私清单与账号删除合规、TestFlight 上架 | `M5.1`、`M5.2` |
 
 *(注：未来 Web 端可在 M5 完成后作为 `M6` 里程碑直接基于 `M1` 定义的 OpenAPI 契约启动，无需改动后端核心逻辑。)*
@@ -174,47 +174,49 @@
 
 ---
 
-## M4：iOS 客户端核心应用（采集→复核→导出）
+## M4：测试环境与 iOS 客户端核心应用（采集→复核→导出）
 
-### `M4.1-ios-scaffold-auth-and-offline-store`：iOS 工程初始化、极简登录与离线存储底座
-- **目标**：创建 Swift/SwiftUI iOS 工程，完成基于 OpenAPI 契约的网络层、V1 极简登录页（Supabase 单账号）以及本地 `SwiftData` + 沙盒图片仓。
-- **前置依赖**：`M1.3-auth-storage-and-openapi-contract`。
-- **范围与约束**：
-  - 初始化 Xcode 工程（iOS 17+），集成 `CoreNetwork`（Bearer JWT + 预签名直传/下载）与 `LocalStore`（`SwiftData`）。
-  - 实现极简登录页面（邮箱/密码登录，不提供公开注册/团队切换 UI）与后台上传队列（按 `sha256` 幂等上传）。
-  - 实现账号信息页与“删除账号及所有数据”入口（调用 `DELETE /account`）。
-- **验收标准**：
-  - App 可在 iOS 模拟器/真机启动，完成登录后离线创建批次并重启后数据不丢失，联网后自动状态同步。
+### `M4.1-test-backend-environment`：低成本测试后端与远端冒烟环境
+- **目标**：基于现有 Dockerfile 在 Render Free 建立非生产测试后端，接入既有 Supabase 测试数据库和对象存储，为 iOS 联调提供 HTTPS 基地址。
+- **前置依赖**：`M3.2-backend-e2e-and-deployment-config`。
+- **范围与约束**：只提交可审查的部署声明、脱敏环境变量清单和合成数据冒烟脚本；真实 Render 服务创建、GitHub 授权和 Secrets 注入须先登记 attempt ID 并经项目所有者授权。禁止生产数据和真实票据。
+- **验收标准**：远端健康检查、鉴权拒绝、测试账号鉴权以及合成数据最小 API 链路通过；仓库和日志不含凭证。
 
-### `M4.2-ios-capture-and-import`：拍照文档扫描、端侧 Vision OCR 与批次管理 UI
-- **目标**：实现核心采集与端侧免费 OCR 能力，用户可直接在 App 内拍照（文档扫描切边）、从相册多选或导入 PDF，彻底摆脱向电脑导照片。
-- **前置依赖**：`M4.1-ios-scaffold-auth-and-offline-store`。
-- **范围与约束**：
-  - 集成 `VNDocumentCameraViewController` 支持连续拍照、自动边缘裁剪与透视矫正。
-  - 调用 iPhone 原生 `Vision` 框架（`VNRecognizeTextRequest`，`.accurate` 模式）在端侧离线提取文本行与坐标框，随 `confirm` 接口一并上传。
-  - 集成 `PhotosPicker` 与 `UIDocumentPickerViewController`（支持图片与 PDF）。
-  - 原始文件落盘本地只读沙盒并展示上传状态（待上传/上传中/已入库/秒传）。
-- **验收标准**：
-  - 实测连拍 5 张小票 + 导入 1 个 PDF，均成功保存本地并自动直传至云端对象存储。
+### `M4.2-ios-project-scaffold-and-ci`：SwiftUI 工程骨架与真实云端编译
+- **目标**：使用 XcodeGen 创建 iOS 17+ SwiftUI 工程、共享 Scheme、基础导航与测试 Target，并让现有 GitHub Actions 执行真实构建和模拟器测试。
+- **前置依赖**：`M3.3-ios-cloud-ci-foundation`。
+- **范围与约束**：只建立工程、App 壳层、配置注入边界和测试骨架，不提前实现登录、存储或业务页面；禁止签名和 App Store 配置。
+- **验收标准**：从 `ios/project.yml` 全新生成工程，并在固定的 iPhone 16 / iOS 18.5 Simulator 上通过 `build-for-testing` 与 `test-without-building`。
 
-### `M4.3-ios-review-and-templates`：交易复核明细、异常高亮与规则模板管理 UI
-- **目标**：实现批次处理结果展示、异常告警高亮提示、人工微调交互，以及规则模板的查看、复制与自定义编辑。
-- **前置依赖**：`M2.5-transaction-review-api`、`M4.2-ios-capture-and-import`。
-- **范围与约束**：
-  - 批次详情页按三级分组展示交易，顶部展示 `missing_alerts`（如缺失机场交通）与待确认计数。
-  - 交易详情支持并排/切换查看关联的 `Invoice` 与 `Receipt` 原图，支持修改分类、均分人数、剔除小费金额与备注。
-  - 模板管理页展示 CMI 默认模板（只读标示），支持一键“复制并自定义”修改模板名称与合规开关。
-- **验收标准**：
-  - 人工修改交易分类或均分人数后，列表金额与分组小计实时更新并同步服务端。
+### `M4.3-ios-auth-network-and-account`：Supabase 登录、契约网络层与账号管理
+- **目标**：实现单账号邮箱/密码登录、会话恢复与刷新、OpenAPI 强类型网络层、Bearer JWT 注入及账号删除入口。
+- **前置依赖**：`M4.1-test-backend-environment`、`M4.2-ios-project-scaffold-and-ci`。
+- **范围与约束**：优先复用官方 Supabase Swift 与 Swift OpenAPI 工具链；不提供公开注册、团队或多账号切换；测试密码只存 GitHub/平台 Secrets。
+- **验收标准**：模拟器可登录测试账号、重启恢复会话、访问受保护 API，并在未认证或 Token 失效时进入可恢复登录状态。
 
-### `M4.4-ios-export-and-share`：一键生成导出包与系统 Share Sheet 分享
-- **目标**：完成导出闭环，用户在 iOS 端一键生成并下载标准化 ZIP 报销包（或单独预览 Excel），通过系统 Share Sheet 分享或保存。
-- **前置依赖**：`M3.1-excel-and-zip-exporter`、`M4.3-ios-review-and-templates`。
-- **范围与约束**：
-  - 触发 `POST /batches/{id}/export`，轮询任务进度并下载 ZIP 至本地缓存。
-  - 支持 `QuickLook` 预览 ZIP 内文件或 `UIActivityViewController` 一键转发至微信、邮件、Files 或 Google Drive。
-- **验收标准**：
-  - 端到端在真机上完成“拍照 → 自动识别 → 复核 → 导出 ZIP 并分享到 Files/微信”全流程。
+### `M4.4-ios-offline-store-and-upload-queue`：SwiftData 离线批次与幂等上传队列
+- **目标**：建立 `SwiftData` 本地模型、只读 RawVault 沙盒、离线批次管理和基于 SHA-256 的后台直传队列。
+- **前置依赖**：`M4.3-ios-auth-network-and-account`。
+- **范围与约束**：本 Task 只处理本地持久化、批次同步、预签名上传/确认和重试状态机；不包含相机、相册、OCR 或复核 UI。
+- **验收标准**：离线创建批次与导入合成文件后重启不丢失，恢复网络后完成幂等上传且不会覆盖原始文件。
+
+### `M4.5-ios-capture-import-and-ocr`：文档扫描、相册/PDF 导入与端侧 OCR
+- **目标**：实现 VisionKit 连拍扫描、相册多选、PDF 导入与 Vision 端侧离线 OCR，并接入 M4.4 的本地文件和上传队列。
+- **前置依赖**：`M4.4-ios-offline-store-and-upload-queue`。
+- **范围与约束**：OCR 使用 `VNRecognizeTextRequest` `.accurate` 模式；原始文件不可变；模拟器使用合成夹具，真实相机验收保留人工门禁。
+- **验收标准**：导入 5 张合成小票和 1 个 PDF 后均保存、生成 OCR 结构并进入上传队列；真机连拍另行登记验收。
+
+### `M4.6-ios-review-and-templates`：交易复核、异常提示与模板管理
+- **目标**：实现三级分组交易列表、异常告警、凭证查看、人工修订以及默认模板复制和编辑。
+- **前置依赖**：`M2.5-transaction-review-api`、`M4.5-ios-capture-import-and-ocr`。
+- **范围与约束**：客户端只展示和提交服务端契约，不复制确定性业务规则；图片使用预签名下载，不持久化敏感 URL。
+- **验收标准**：修改分类、均分人数、小费或备注后，界面状态与服务端返回一致；默认模板保持只读，自定义副本可编辑。
+
+### `M4.7-ios-export-and-share`：导出轮询、下载预览与系统分享
+- **目标**：完成导出闭环：触发导出、轮询任务、下载 ZIP、预览 Excel/文件并通过系统 Share Sheet 分享或保存。
+- **前置依赖**：`M3.1-excel-and-zip-exporter`、`M4.6-ios-review-and-templates`。
+- **范围与约束**：下载使用短期预签名 URL 和本地临时目录；退出或过期后清理缓存；真实微信分享与真机路径保留人工门禁。
+- **验收标准**：模拟器完成合成数据导出、下载、预览与 Files 分享；真机完成“采集 → 复核 → 导出 ZIP”人工验收。
 
 ---
 
@@ -222,7 +224,7 @@
 
 ### `M5.1-ios-share-extension`：系统 Share Extension（从外部 App 一键导入账单）
 - **目标**：新增 iOS Share Extension，支持用户在 Uber、Grab、微信、邮件或 Files 中将 PDF 账单或截图直接分享进本 App 指定批次。
-- **前置依赖**：`M4.2-ios-capture-and-import`。
+- **前置依赖**：`M4.5-ios-capture-import-and-ocr`。
 - **范围与约束**：
   - 配置 App Group 共享容器，Share Extension 接收图片/PDF 后写入共享队列，主 App 唤醒后自动入库并上传。
 - **验收标准**：
@@ -230,7 +232,7 @@
 
 ### `M5.2-app-store-readiness-and-e2e`：App Store 审核合规、隐私清单与真实样本验收
 - **目标**：完成 App Store 上架前的所有合规检查与真实历史报销数据回归验收。
-- **前置依赖**：`M3.2-backend-e2e-and-deployment-config`、`M4.4-ios-export-and-share`、`M5.1-ios-share-extension`。
+- **前置依赖**：`M3.2-backend-e2e-and-deployment-config`、`M4.7-ios-export-and-share`、`M5.1-ios-share-extension`。
 - **范围与约束**：
   - 补全 `PrivacyInfo.xcprivacy`、相机/相册权限文案（Info.plist）、账号删除流程自测。
   - 使用脱敏后的真实出差/餐费凭证集运行全链路回归测试，对比手工/旧脚本输出核验金额与文件命名一致性。

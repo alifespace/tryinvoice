@@ -1,0 +1,79 @@
+hats:
+  plan:
+    name: "📐 TryInvoice M4 Planner"
+    backend:
+      command: ./ralph/claude.mjs
+      args: ["--model", "sonnet", "--effort", "high", "--stage", "plan"]
+    description: 编译当前 M4 Task 的最小上下文，拆解 Subtask，并协调人工门禁前后的恢复。
+    triggers: [work.start, task.done, task.replan]
+    publishes: [spec.ready, review.accepted, LOOP_COMPLETE, loop.cancel]
+    instructions: >-
+      以 .ralph/agent/m4-progress.json 为轻量热账本（建议<=5KB），只保留状态枚举、唯一active指针、
+      最近检查点、失败/重规划计数、人工门禁状态和冷归档路径。首次进入或切换新Task时，按需读取
+      AGENTS.md、docs/milestones.md、当前docs/tasks/M4.*.md、docs/environments/test-environment.md及相关
+      设计章节，把白名单、契约、不做范围、预算、验证命令和门禁前置条件编译到
+      .ralph/agent/m4-current-spec.md（建议<=5KB）；禁止把整份设计与历史复制进Spec。每次只规划一个
+      Subtask，不写业务代码。Task建议<=2000行、Subtask建议<=800行。M4.1与M4.2的无副作用准备工作
+      可依次推进；依赖真实外部回执的Task不得伪造accepted。收到task.replan后修订、重拆或推进其他
+      独立工作；同一阻塞项累计重规划4次仍未通过且整轮无其他工作时才可loop.cancel。若所有可执行
+      工作均完成而只剩尚未授权的真实外部写入，应记录冻结候选、完整命令/参数、attempt前置与清理
+      方案后loop.cancel安全停机，待同一配置--continue恢复。仅在M4.1-M4.7全部accepted后发布
+      LOOP_COMPLETE。Scratchpad每轮覆写为<=4KB摘要。
+    max_activations: 100
+
+  builder:
+    name: "⚙️ TryInvoice M4 Builder"
+    backend:
+      command: ./ralph/opencode.mjs
+      args: ["--model", "openai/gpt-6-luna", "--effort", "high", "--stage", "builder"]
+    description: 仅按精简 Spec 实现 M4，并完成语言适配的七项真实门禁。
+    triggers: [spec.ready, review.rejected]
+    publishes: [build.done, task.replan, loop.cancel]
+    instructions: >-
+      默认只读取当前Spec、m4-progress热指针、最近检查点、白名单源码与必要证据；禁止每轮全量重读
+      AGENTS/HLD/LLD/Milestones。严格按白名单实现，不跨Task、不修改冻结Task文档。测试满足
+      Test:Feat<=1.3或新增测试<450。根据当前Task实际语言逐项运行tests、lint、typecheck、audit、
+      coverage、complexity、duplication；Swift真实编译/模拟器门禁只能使用已授权GitHub回执，未运行
+      不得填pass。全部通过后build.done必须以tests: pass, lint: pass, typecheck: pass, audit: pass,
+      coverage: pass, complexity: <实测最大圈复杂度纯数字且<=10>, duplication: pass.开头。
+      涉及Supabase密码重置、创建用户/bucket、Render服务、GitHub推送/Actions、真实API费用、真机权限
+      或对外分享时，只能产出冻结候选、完整待执行步骤、attempt前置与清理方案，严禁自行实施或把
+      prepared冒充accepted。发现Spec、前置、白名单、代码量或复杂度无法兼容时记录实测证据并发布
+      task.replan，禁止直接loop.cancel。不得依赖Metrics。Scratchpad每轮覆写为<=4KB摘要。
+    max_activations: 160
+
+  critic:
+    name: "🔍 TryInvoice M4 Critic"
+    backend:
+      command: ./ralph/opencode.mjs
+      args: ["--model", "openai/gpt-6.2-sol", "--effort", "medium", "--stage", "critic"]
+    description: 仅按当前 Spec 独立复验，并区分本地交付与人工门禁回执。
+    triggers: [build.done]
+    publishes: [review.accepted, review.rejected, task.replan, loop.cancel]
+    instructions: >-
+      默认只读取当前Spec、热指针、最近检查点、白名单diff与必要证据；禁止每轮全量重读项目文档。
+      独立复验七项门禁、范围、契约、测试比例、安全与关键集成路径，不追加需求、不修改业务源码。
+      对真实外部操作必须先复核冻结候选、实际命令/参数、Free方案、Secret字段、attempt与清理方式；
+      缺少真实回执时只能确认准备工作，不得接受要求真实部署、云端编译、真机或分享的最终验收项。
+      通过发布review.accepted；实现缺陷发布review.rejected；Spec矛盾、白名单不足或前置回执缺失发布
+      task.replan；同一Subtask连续第4次真实拒绝必须task.replan。不得查询Metrics。Scratchpad每轮
+      覆写为<=4KB摘要。
+    max_activations: 160
+
+  finalizer:
+    name: "✅ TryInvoice M4 Finalizer"
+    backend:
+      command: ./ralph/opencode.mjs
+      args: ["--model", "openai/gpt-6.2-sol", "--effort", "medium", "--stage", "finalizer"]
+    description: 确定性收尾，归档详细证据并保持 M4 热账本轻量。
+    triggers: [review.accepted]
+    publishes: [task.done, LOOP_COMPLETE, loop.cancel]
+    instructions: >-
+      默认只读取当前Spec、热指针、Critic最近检查点和白名单diff，不得全量重读历史。确定性复核后，
+      将命令输出、diff统计、行数、覆盖率、人工门禁回执与验收报告写入
+      .ralph/agent/archive/m4/<subtask>.md；m4-progress.json只更新状态、唯一active指针、最近检查点、
+      人工门禁状态和冷归档路径并保持建议<=5KB。若Critic只接受无副作用准备工作，应把Subtask标记
+      prepared/waiting_manual而非accepted，并发布task.done让Planner推进其他独立工作；缺少真实回执
+      不得将对应Task收尾为accepted。当前Subtask完成发布task.done，由Planner推进；不得提前切Task
+      或发布LOOP_COMPLETE。不得依赖Metrics。Scratchpad每轮覆写为<=4KB摘要。
+    max_activations: 100

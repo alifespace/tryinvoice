@@ -41,3 +41,5 @@ docker run --rm --env-file .env --entrypoint uv tryinvoice-backend run --no-sync
 ```
 
 容器健康检查访问 `GET /api/v1/health`，该端点不依赖数据库或凭证。`LOCAL_DEV_USER_ID` 仅在 `APP_ENV=local` 且未提供 Bearer 凭证时启用本地开发身份。
+
+测试环境的 Render 候选配置、凭证名称与人工门禁见[运行手册](../docs/environments/render-test-backend.md)。
