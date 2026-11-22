@@ -37,10 +37,27 @@ jobs:
       - name: Probe Apple toolchain
         run: bash ios/scripts/ci-probe.sh
       - name: Build and test
+        env:
+          TEST_RUNNER_TRYINVOICE_SEAM_API_BASE_URL: ${{ secrets.TRYINVOICE_TEST_API_BASE_URL }}
+          TEST_RUNNER_TRYINVOICE_SEAM_SUPABASE_URL: ${{ secrets.TRYINVOICE_TEST_SUPABASE_URL }}
+          TEST_RUNNER_TRYINVOICE_SEAM_SUPABASE_ANON_KEY: ${{ secrets.TRYINVOICE_TEST_SUPABASE_ANON_KEY }}
+          TEST_RUNNER_TRYINVOICE_SEAM_EMAIL: ${{ secrets.TRYINVOICE_TEST_EMAIL }}
+          TEST_RUNNER_TRYINVOICE_SEAM_PASSWORD: ${{ secrets.TRYINVOICE_TEST_PASSWORD }}
+          TEST_RUNNER_TRYINVOICE_SEAM_REQUIRED: "1"
         run: bash ios/scripts/ci-build-test.sh
+      - name: Scan diagnostics for secrets
+        id: scan_diagnostics_secrets
+        if: always()
+        env:
+          TEST_RUNNER_TRYINVOICE_SEAM_API_BASE_URL: ${{ secrets.TRYINVOICE_TEST_API_BASE_URL }}
+          TEST_RUNNER_TRYINVOICE_SEAM_SUPABASE_URL: ${{ secrets.TRYINVOICE_TEST_SUPABASE_URL }}
+          TEST_RUNNER_TRYINVOICE_SEAM_SUPABASE_ANON_KEY: ${{ secrets.TRYINVOICE_TEST_SUPABASE_ANON_KEY }}
+          TEST_RUNNER_TRYINVOICE_SEAM_EMAIL: ${{ secrets.TRYINVOICE_TEST_EMAIL }}
+          TEST_RUNNER_TRYINVOICE_SEAM_PASSWORD: ${{ secrets.TRYINVOICE_TEST_PASSWORD }}
+        run: python3 ios/scripts/ci-scan-secrets.py
       # v4.6.2
       - name: Upload CI diagnostics
-        if: always()
+        if: always() && steps.scan_diagnostics_secrets.outputs.scan_complete == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ios-ci-diagnostics

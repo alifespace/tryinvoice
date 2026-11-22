@@ -61,8 +61,42 @@ Artifact 仅收集 `ios/build/ci/**` 中的 `.xcresult`、日志和失败附件�
 DerivedData、签名文件、描述文件或 `.env*`。不配置 Secrets；当前探针及跳过路径不处理
 发票或 OCR 内容。未来测试应继续使用合成或彻底脱敏数据。
 
+## 认证配置
+
+应用从 `SUPABASE_URL` 和 `SUPABASE_ANON_KEY` 读取 Supabase Auth 配置。仓库中的
+`Debug.xcconfig` 与 `Release.xcconfig` 仅保留空占位；本地或 CI 应通过未提交的配置/平台
+Secrets 注入真实值，不要将凭证写入源码、日志或测试产物。缺少配置时登录保持禁用。
+认证由固定版本的 `supabase-swift` Auth SDK 管理，会话凭据使用 SDK 在 Apple 平台的默认安全存储。
+
+## M4.3 真实接缝测试与 Secret 名称
+
+CI 的 `LiveSeamTests` 使用独立测试账号验证 Supabase 登录与会话恢复，以及带 Bearer
+认证的 API 请求。仅由项目所有者在 GitHub Actions 手工配置以下 Repository Secrets；
+测试步骤要求全部存在，Secret 值不得写入仓库、测试断言或日志：
+
+- `TRYINVOICE_TEST_API_BASE_URL`
+- `TRYINVOICE_TEST_SUPABASE_URL`
+- `TRYINVOICE_TEST_SUPABASE_ANON_KEY`
+- `TRYINVOICE_TEST_EMAIL`
+- `TRYINVOICE_TEST_PASSWORD`
+
+CI 会在上传诊断制品前扫描 `ios/build/ci`，删除包含任一配置值或其 URL 编码形式的文件；
+本地未配置接缝测试环境时，相关 XCTest 会跳过。
+
+若账号删除 API 已返回 204、但本机清除会话及失效覆盖均失败，应用仅在内存中保留“账号数据已删除、
+本机退出未完成”状态，并只允许重试本地清理，不会再次发送删除请求。此状态不跨重启持久化；
+如果系统仍拒绝删除或覆盖安全存储，重启后可能恢复原登录会话。此时账号业务数据已删除，但
+Supabase Auth 用户未删除；用户可再次退出或按后端幂等删除接口重试。
+
 本地清理 CI 生成物：
 
 ```sh
 rm -rf ios/TryInvoice.xcodeproj ios/build/ci ios/build/Info.plist
 ```
+
+## API 类型同步
+
+`contracts/openapi.json` 是 API 类型的来源。新增或修改契约后，从仓库根目录运行
+`python3 ios/scripts/sync-openapi-types.py` 更新 `APITypes.generated.swift`；提交前运行
+`python3 ios/scripts/sync-openapi-types.py --check` 检查生成文件是否与契约一致。生成文件由脚本
+维护，不应手工编辑。

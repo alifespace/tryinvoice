@@ -52,4 +52,44 @@ final class AppConfigurationTests: XCTestCase {
             XCTAssertEqual(configuration.apiBaseURL?.absoluteString, value)
         }
     }
+
+    func testMissingSupabaseValuesDoNotInvalidateAPIConfiguration() throws {
+        let result = AppConfiguration.load(from: ["API_BASE_URL": "https://api.example.test"])
+
+        let configuration = try result.get()
+        XCTAssertNil(configuration.supabaseURL)
+        XCTAssertNil(configuration.supabaseAnonKey)
+        XCTAssertEqual(
+            configuration.supabaseConfigurationError,
+            .configurationMissing("SUPABASE_URL")
+        )
+    }
+
+    func testSupabaseURLAcceptsHTTPSAndLocalHTTPOnly() throws {
+        for value in ["https://project.example.test", "http://localhost:54321"] {
+            let result = AppConfiguration.load(
+                from: [
+                    "API_BASE_URL": "https://api.example.test",
+                    "SUPABASE_URL": value,
+                    "SUPABASE_ANON_KEY": "synthetic-anon-key",
+                ]
+            )
+            let configuration = try result.get()
+            XCTAssertEqual(configuration.supabaseURL?.absoluteString, value)
+            XCTAssertEqual(configuration.supabaseAnonKey, "synthetic-anon-key")
+            XCTAssertNil(configuration.supabaseConfigurationError)
+        }
+    }
+
+    func testInsecureSupabaseURLIsRejectedWithoutExposingItsValue() {
+        XCTAssertEqual(
+            AppConfiguration.load(
+                from: [
+                    "API_BASE_URL": "https://api.example.test",
+                    "SUPABASE_URL": "http://project.example.test",
+                ]
+            ),
+            .failure(.configurationInvalid("SUPABASE_URL"))
+        )
+    }
 }

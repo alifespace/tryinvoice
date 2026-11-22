@@ -37,6 +37,8 @@ def test_project_declares_shared_scheme_and_generated_info_properties() -> None:
     assert Path(app["info"]["path"]).parts[0] == "build"
     assert app["info"]["properties"] == {
         "API_BASE_URL": "$(API_BASE_URL)",
+        "SUPABASE_URL": "$(SUPABASE_URL)",
+        "SUPABASE_ANON_KEY": "$(SUPABASE_ANON_KEY)",
         "UILaunchScreen": {},
     }
     scheme = project["schemes"]["TryInvoice"]

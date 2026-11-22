@@ -13,12 +13,19 @@ settings:
     CODE_SIGN_STYLE: Manual
     CODE_SIGNING_ALLOWED: NO
     CODE_SIGNING_REQUIRED: NO
+packages:
+  supabase-swift:
+    url: https://github.com/supabase/supabase-swift
+    exactVersion: 2.5.1
 targets:
   TryInvoice:
     type: application
     platform: iOS
     sources:
       - path: TryInvoice
+    dependencies:
+      - package: supabase-swift
+        product: Auth
     configFiles:
       Debug: Config/Debug.xcconfig
       Release: Config/Release.xcconfig
@@ -26,6 +33,8 @@ targets:
       path: build/Info.plist
       properties:
         API_BASE_URL: "$(API_BASE_URL)"
+        SUPABASE_URL: "$(SUPABASE_URL)"
+        SUPABASE_ANON_KEY: "$(SUPABASE_ANON_KEY)"
         UILaunchScreen: {}
   TryInvoiceTests:
     type: bundle.unit-test
