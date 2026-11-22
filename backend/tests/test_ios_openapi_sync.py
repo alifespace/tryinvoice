@@ -69,6 +69,13 @@ def test_generated_models_keep_field_order_and_contract_optionality() -> None:
     assert "let loc: [JSONValue]" in generated
 
 
+def test_generated_upload_models_cover_upload_contract() -> None:
+    generated = _SYNC.render_types(json.loads(CONTRACT.read_text(encoding="utf-8")))
+    assert "struct PresignRequest:" in generated
+    assert "let clientOcrJson: JSONValue?" in generated
+    assert "let uploadUrl: String?" in generated
+
+
 def test_contract_schema_change_changes_generated_output() -> None:
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
     baseline = _SYNC.render_types(contract)

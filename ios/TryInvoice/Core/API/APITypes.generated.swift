@@ -107,8 +107,78 @@ struct BatchPage: Codable, Equatable, Sendable {
     let total: Int
 }
 
+struct ConfirmRequest: Codable, Equatable, Sendable {
+    let clientOcrJson: JSONValue?
+    let documentId: String
+    let exifTakenAt: String?
+    let filename: String
+    let mimeType: String
+    let sha256Hash: String
+
+    enum CodingKeys: String, CodingKey {
+        case clientOcrJson = "client_ocr_json"
+        case documentId = "document_id"
+        case exifTakenAt = "exif_taken_at"
+        case filename
+        case mimeType = "mime_type"
+        case sha256Hash = "sha256_hash"
+    }
+}
+
+struct DocumentOut: Codable, Equatable, Sendable {
+    let batchId: String
+    let createdAt: String
+    let docRole: String
+    let fileSizeBytes: Int
+    let id: String
+    let mimeType: String
+    let ocrStatus: String
+    let originalFilename: String
+    let sha256Hash: String
+
+    enum CodingKeys: String, CodingKey {
+        case batchId = "batch_id"
+        case createdAt = "created_at"
+        case docRole = "doc_role"
+        case fileSizeBytes = "file_size_bytes"
+        case id
+        case mimeType = "mime_type"
+        case ocrStatus = "ocr_status"
+        case originalFilename = "original_filename"
+        case sha256Hash = "sha256_hash"
+    }
+}
+
 struct HTTPValidationError: Codable, Equatable, Sendable {
     let detail: [ValidationError]?
+}
+
+struct PresignRequest: Codable, Equatable, Sendable {
+    let filename: String
+    let mimeType: String
+    let sha256Hash: String
+
+    enum CodingKeys: String, CodingKey {
+        case filename
+        case mimeType = "mime_type"
+        case sha256Hash = "sha256_hash"
+    }
+}
+
+struct PresignResponse: Codable, Equatable, Sendable {
+    let alreadyExists: Bool
+    let documentId: String
+    let expiresIn: Int?
+    let uploadMethod: String?
+    let uploadUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case alreadyExists = "already_exists"
+        case documentId = "document_id"
+        case expiresIn = "expires_in"
+        case uploadMethod = "upload_method"
+        case uploadUrl = "upload_url"
+    }
 }
 
 struct ValidationError: Codable, Equatable, Sendable {

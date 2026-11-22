@@ -41,6 +41,7 @@ struct RootView: View {
                                 .foregroundStyle(.red)
                         }
                     }
+                    .task { await runUploadQueue() }
                 case .accountDeletedCleanupPending:
                     AccountView(
                         viewModel: viewModel,
@@ -51,5 +52,16 @@ struct RootView: View {
             .navigationTitle(viewModel.navigationTitle)
         }
         .task { await viewModel.restore() }
+    }
+
+    /// 登录后才启动上传队列；视图消失时 `.task` 取消，队列随之停止。
+    private func runUploadQueue() async {
+        guard
+            let queue = environment.uploadQueue,
+            let connectivity = environment.connectivity
+        else {
+            return
+        }
+        await queue.run(connectivity: connectivity)
     }
 }

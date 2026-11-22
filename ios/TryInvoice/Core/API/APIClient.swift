@@ -59,6 +59,59 @@ struct APIClient {
         try validate(response, expectedStatus: 204)
     }
 
+    func presign(batchId: UUID, _ payload: PresignRequest) async throws -> PresignResponse {
+        let request = try makeJSONRequest(
+            path: "batches/\(batchId.uuidString.lowercased())/documents/presign",
+            method: "POST",
+            body: payload
+        )
+        let (data, response) = try await perform(request, authenticated: true)
+        try validate(response, expectedStatus: 200)
+        return try decode(PresignResponse.self, from: data)
+    }
+
+    func confirm(batchId: UUID, _ payload: ConfirmRequest) async throws -> DocumentOut {
+        let request = try makeJSONRequest(
+            path: "batches/\(batchId.uuidString.lowercased())/documents/confirm",
+            method: "POST",
+            body: payload
+        )
+        let (data, response) = try await perform(request, authenticated: true)
+        try validate(response, expectedStatuses: [200, 201])
+        return try decode(DocumentOut.self, from: data)
+    }
+
+    func upload(to url: URL, fileURL: URL, contentType: String) async throws {
+        var request = URLRequest(url: url, timeoutInterval: timeout)
+        request.httpMethod = "PUT"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.setValue("no-cache, no-store", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+
+        let response: URLResponse
+        do {
+            (_, response) = try await session.upload(for: request, fromFile: fileURL)
+        } catch is URLError {
+            throw AppError.network
+        } catch {
+            throw AppError.unknown
+        }
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppError.unknown
+        }
+        switch httpResponse.statusCode {
+        case 200...299:
+            return
+        case 401, 403:
+            throw AppError.unauthorized
+        case 500...599:
+            throw AppError.server
+        default:
+            throw AppError.unknown
+        }
+    }
+
     private func makeRequest(
         path: String,
         method: String,
@@ -90,6 +143,21 @@ struct APIClient {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("no-cache, no-store", forHTTPHeaderField: "Cache-Control")
         request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        return request
+    }
+
+    private func makeJSONRequest<Body: Encodable>(
+        path: String,
+        method: String,
+        body: Body
+    ) throws -> URLRequest {
+        var request = try makeRequest(path: path, method: method)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        do {
+            request.httpBody = try JSONEncoder().encode(body)
+        } catch {
+            throw AppError.unknown
+        }
         return request
     }
 
@@ -149,7 +217,14 @@ struct APIClient {
         _ response: HTTPURLResponse,
         expectedStatus: Int
     ) throws {
-        guard response.statusCode != expectedStatus else {
+        try validate(response, expectedStatuses: [expectedStatus])
+    }
+
+    private func validate(
+        _ response: HTTPURLResponse,
+        expectedStatuses: Set<Int>
+    ) throws {
+        guard !expectedStatuses.contains(response.statusCode) else {
             return
         }
         switch response.statusCode {
@@ -175,3 +250,5 @@ struct APIClient {
         }
     }
 }
+
+extension APIClient: UploadAPI {}

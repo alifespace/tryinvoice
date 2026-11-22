@@ -16,7 +16,11 @@ SCHEMA_NAMES = (
     "BatchCreate",
     "BatchOut",
     "BatchPage",
+    "ConfirmRequest",
+    "DocumentOut",
     "HTTPValidationError",
+    "PresignRequest",
+    "PresignResponse",
     "ValidationError",
 )
 
@@ -114,6 +118,11 @@ def _union_type(
         return swift_type, nullable
     simple_types = {"boolean", "integer", "number", "string"}
     if all(variant.get("type") in simple_types for variant in non_null):
+        return "JSONValue", nullable
+    # Free-form JSON payloads (object/array, optionally null) stay opaque.
+    if all(
+        variant.get("type") in {"object", "array"} for variant in non_null
+    ) and len(non_null) > 1:
         return "JSONValue", nullable
     raise ValueError(f"Unsupported anyOf schema: {schema!r}")
 

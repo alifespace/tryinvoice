@@ -6,12 +6,16 @@ struct AppEnvironment {
     let authService: (any AuthService)?
     let deleteAccount: (() async throws -> Void)?
     let authConfigurationError: AppError?
+    let uploadQueue: UploadQueue?
+    let connectivity: (any ConnectivityMonitor)?
 
     init(
         configuration: AppConfiguration,
         authService: (any AuthService)? = nil,
         deleteAccount: (() async throws -> Void)? = nil,
-        authConfigurationError: AppError? = nil
+        authConfigurationError: AppError? = nil,
+        uploadQueue: UploadQueue? = nil,
+        connectivity: (any ConnectivityMonitor)? = nil
     ) {
         self.configuration = configuration
         self.error = nil
@@ -19,6 +23,8 @@ struct AppEnvironment {
         self.deleteAccount = deleteAccount
         self.authConfigurationError =
             authConfigurationError ?? configuration.supabaseConfigurationError
+        self.uploadQueue = uploadQueue
+        self.connectivity = connectivity
     }
 
 #if DEBUG
@@ -32,6 +38,8 @@ struct AppEnvironment {
         self.authService = authService
         self.deleteAccount = deleteAccount
         self.authConfigurationError = nil
+        self.uploadQueue = nil
+        self.connectivity = nil
     }
 #endif
 
@@ -41,6 +49,8 @@ struct AppEnvironment {
         self.authService = nil
         self.deleteAccount = nil
         self.authConfigurationError = error
+        self.uploadQueue = nil
+        self.connectivity = nil
     }
 
     static func live(
@@ -78,13 +88,53 @@ struct AppEnvironment {
                 )
             }
             let apiClient = APIClient(baseURL: apiBaseURL, tokenProvider: authService)
+            // 上传队列依赖 SwiftData 主上下文，只能在主线程装配；无法装配时保持 nil，不影响登录。
+            let services = Thread.isMainThread
+                ? MainActor.assumeIsolated { makeUploadServices(api: apiClient) }
+                : nil
             return AppEnvironment(
                 configuration: configuration,
                 authService: authService,
-                deleteAccount: { try await apiClient.deleteAccount() }
+                deleteAccount: { try await apiClient.deleteAccount() },
+                uploadQueue: services?.queue,
+                connectivity: services?.monitor
             )
         case let .failure(error):
             return AppEnvironment(error: error)
         }
     }
+
+    /// 磁盘容器、RawVault 或队列任一不可用都返回 nil，绝不因离线存储拖垮应用启动。
+    @MainActor
+    private static func makeUploadServices(api: any UploadAPI) -> UploadServices? {
+        guard let storeURL = uploadStoreURL else {
+            return nil
+        }
+        do {
+            let container = try LocalStore.makeContainer(storeURL: storeURL)
+            let store = LocalStore(
+                container: container,
+                vault: try RawVault(root: RawVault.defaultRoot)
+            )
+            return UploadServices(
+                queue: UploadQueue(store: store, api: api),
+                monitor: NWPathConnectivityMonitor()
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    private static var uploadStoreURL: URL? {
+        FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("TryInvoice", isDirectory: true)
+            .appendingPathComponent("OfflineStore.sqlite")
+    }
+}
+
+private struct UploadServices: Sendable {
+    let queue: UploadQueue
+    let monitor: any ConnectivityMonitor
 }
