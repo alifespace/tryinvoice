@@ -72,7 +72,7 @@ xcodebuild build-for-testing \
   -destination "platform=iOS Simulator,name=$SIM_DEVICE,OS=$SIM_OS" \
   -derivedDataPath "$RUNNER_TEMP/DerivedData" \
   -resultBundlePath "$OUTPUT_DIR/build.xcresult" \
-  CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$LOG_DIR/build.log"
+  CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_IDENTITY=- 2>&1 | tee "$LOG_DIR/build.log"
 
 if xcodebuild test-without-building \
   -project "$PROJECT" \
@@ -80,7 +80,7 @@ if xcodebuild test-without-building \
   -destination "platform=iOS Simulator,name=$SIM_DEVICE,OS=$SIM_OS" \
   -derivedDataPath "$RUNNER_TEMP/DerivedData" \
   -resultBundlePath "$OUTPUT_DIR/test.xcresult" \
-  CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$LOG_DIR/test.log"; then
+  CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_IDENTITY=- 2>&1 | tee "$LOG_DIR/test.log"; then
   exit 0
 else
   TEST_STATUS=$?

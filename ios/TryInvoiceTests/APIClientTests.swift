@@ -272,13 +272,9 @@ private struct StubResponse {
     let body: Data
     let error: Error?
 
-    static func response(statusCode: Int, body: String = "") -> Self {
-        Self(statusCode: statusCode, body: Data(body.utf8), error: nil)
-    }
+    static func response(statusCode: Int, body: String = "") -> Self { Self(statusCode: statusCode, body: Data(body.utf8), error: nil) }
 
-    static func failure(_ error: Error) -> Self {
-        Self(statusCode: nil, body: Data(), error: error)
-    }
+    static func failure(_ error: Error) -> Self { Self(statusCode: nil, body: Data(), error: error) }
 }
 
 private final class ResponseSequence {
@@ -286,9 +282,7 @@ private final class ResponseSequence {
     private var responses: [StubResponse]
     private(set) var count = 0
 
-    init(_ responses: [StubResponse]) {
-        self.responses = responses
-    }
+    init(_ responses: [StubResponse]) { self.responses = responses }
 
     func next() -> StubResponse {
         lock.lock()
@@ -305,35 +299,25 @@ private final class URLProtocolStub: URLProtocol {
     private static var handler: Handler = { _ in .response(statusCode: 500) }
     private static var recordedRequests: [URLRequest] = []
 
-    static var requests: [URLRequest] {
-        lock.lock()
-        defer { lock.unlock() }
-        return recordedRequests
-    }
+    static var requests: [URLRequest] { lock.lock(); defer { lock.unlock() }; return recordedRequests }
 
-    static var lastRequest: URLRequest? {
-        requests.last
-    }
+    static var lastRequest: URLRequest? { requests.last }
 
     static func install(_ newHandler: @escaping Handler) {
-        lock.lock()
-        defer { lock.unlock() }
+        lock.lock(); defer { lock.unlock() }
         handler = newHandler
         recordedRequests = []
     }
 
-    override class func canInit(with request: URLRequest) -> Bool {
-        true
-    }
+    override class func canInit(with request: URLRequest) -> Bool { true }
 
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        let recordedRequest = Self.requestWithBody(request)
         Self.lock.lock()
         let currentHandler = Self.handler
-        Self.recordedRequests.append(request)
+        Self.recordedRequests.append(recordedRequest)
         Self.lock.unlock()
 
         let result = currentHandler(request)
@@ -361,4 +345,21 @@ private final class URLProtocolStub: URLProtocol {
     }
 
     override func stopLoading() {}
+
+    private static func requestWithBody(_ request: URLRequest) -> URLRequest {
+        guard let stream = request.httpBodyStream else { return request }
+        stream.open()
+        defer { stream.close() }
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 4096)
+        defer { buffer.deallocate() }
+        var body = Data()
+        while stream.hasBytesAvailable {
+            let count = stream.read(buffer, maxLength: 4096)
+            guard count > 0 else { break }
+            body.append(buffer, count: count)
+        }
+        var copy = request
+        copy.httpBody = body
+        return copy
+    }
 }

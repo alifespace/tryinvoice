@@ -69,13 +69,14 @@ def test_project_declares_unit_and_ui_test_targets() -> None:
     assert len(bundle_ids) == 2
 
 
-def test_project_disables_signing_without_team_or_profile_values() -> None:
-    project = (IOS / "project.yml").read_text()
-    assert "CODE_SIGNING_ALLOWED: NO" in project
-    assert not re.search(
-        r"(?im)^\s*(?:DEVELOPMENT_TEAM|PROVISIONING_PROFILE(?:_SPECIFIER)?|teamId):",
-        project,
-    )
+def test_project_uses_adhoc_signing_and_entitlements() -> None:
+    source = (IOS / "project.yml").read_text()
+    paths = [f"{t}/{t}.entitlements" for t in ("TryInvoice", "TryInvoiceTests")]
+    assert 'CODE_SIGN_IDENTITY: "-"' in source
+    assert all(f"CODE_SIGN_ENTITLEMENTS: {path}" in source for path in paths)
+    assert all((IOS / path).is_file() for path in paths)
+    forbidden = r"(?im)^\s*(DEVELOPMENT_TEAM|PROVISIONING_PROFILE(_SPECIFIER)?|teamId):"
+    assert not re.search(forbidden, source)
 
 
 def test_configurations_use_only_local_debug_and_empty_release_urls() -> None:
