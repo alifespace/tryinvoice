@@ -35,6 +35,13 @@ struct RootView: View {
                             AccountView(viewModel: viewModel, email: email)
                         }
                         .accessibilityIdentifier("home.account")
+                        if let pipeline = environment.importPipeline,
+                           let store = environment.captureStore {
+                            NavigationLink("导入票据") {
+                                CaptureView(pipeline: pipeline, store: store)
+                            }
+                            .accessibilityIdentifier("home.capture")
+                        }
                         if let error = viewModel.displayError {
                             Text(error.userMessage)
                                 .font(.callout)

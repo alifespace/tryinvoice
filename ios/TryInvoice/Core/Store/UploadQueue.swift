@@ -126,8 +126,8 @@ final class UploadQueue {
         )
         try ensureCanStart()
         let confirmed = try await api.confirm(batchId: batchId, ConfirmRequest(
-            clientOcrJson: nil, documentId: presign.documentId, exifTakenAt: nil,
-            filename: document.originalName, mimeType: document.mimeType,
+            clientOcrJson: clientOcrJSON(for: document), documentId: presign.documentId,
+            exifTakenAt: nil, filename: document.originalName, mimeType: document.mimeType,
             sha256Hash: document.sha256))
         try store.backfill(serverDocumentId: try uuid(confirmed.id), for: document)
         try store.apply(.confirmed, to: document)
@@ -152,6 +152,12 @@ final class UploadQueue {
     /// 只有在线、`run` 仍存活，且当前步骤属于最新运行时才允许发起新请求。
     private var canStartWork: Bool {
         isOnline && isRunActive && (activeRun == nil || activeRun == currentRun)
+    }
+
+    /// 已存 OCR JSON 解码为并发契约值；缺失或解码失败一律 nil，绝不阻断上传。
+    private func clientOcrJSON(for document: LocalDocument) -> JSONValue? {
+        guard let raw = document.ocrJSON, let data = raw.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(JSONValue.self, from: data)
     }
 
     /// 服务端 ID 必须是 UUID；解析失败按未知错误处理，最终归为永久失败。
