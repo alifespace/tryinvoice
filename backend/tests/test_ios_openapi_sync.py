@@ -87,3 +87,25 @@ def test_contract_schema_change_changes_generated_output() -> None:
 
     assert changed != baseline
     assert "let title: Int" in changed
+
+
+def test_generated_review_and_template_models_keep_contract_shape() -> None:
+    generated = _SYNC.render_types(json.loads(CONTRACT.read_text(encoding="utf-8")))
+    list_out = generated.split("struct TransactionListOut:", maxsplit=1)[1].split(
+        "\n}", maxsplit=1
+    )[0]
+    patch = generated.split("struct TransactionPatch:", maxsplit=1)[1].split(
+        "\n}", maxsplit=1
+    )[0]
+    template_patch = generated.split("struct TemplatePatch:", maxsplit=1)[1].split(
+        "\n}", maxsplit=1
+    )[0]
+    assert "let batchId: String" in list_out
+    assert (
+        list_out.index("let groups: [CategoryGroup]")
+        < list_out.index("let missingAlerts: [JSONValue]")
+        < list_out.index("let status: String")
+    )
+    assert "let tipAmount: JSONValue?" in patch
+    assert 'case tipAmount = "tip_amount"' in patch
+    assert "let rules: RuleTemplateDSL?" in template_patch

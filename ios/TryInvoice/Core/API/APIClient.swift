@@ -81,6 +81,78 @@ struct APIClient {
         return try decode(DocumentOut.self, from: data)
     }
 
+    func listTransactions(batchId: UUID) async throws -> TransactionListOut {
+        let request = try makeRequest(
+            path: "batches/\(batchId.uuidString.lowercased())/transactions",
+            method: "GET"
+        )
+        let (data, response) = try await perform(request, authenticated: true)
+        try validate(response, expectedStatus: 200)
+        return try decode(TransactionListOut.self, from: data)
+    }
+
+    func updateTransaction(
+        id: UUID,
+        _ payload: TransactionPatch
+    ) async throws -> TransactionOut {
+        let request = try makeJSONRequest(
+            path: "transactions/\(id.uuidString.lowercased())",
+            method: "PATCH",
+            body: payload
+        )
+        let (data, response) = try await perform(request, authenticated: true)
+        try validate(response, expectedStatus: 200)
+        return try decode(TransactionOut.self, from: data)
+    }
+
+    func listTemplates() async throws -> [TemplateOut] {
+        let request = try makeRequest(path: "templates", method: "GET")
+        let (data, response) = try await perform(request, authenticated: true)
+        try validate(response, expectedStatus: 200)
+        return try decode([TemplateOut].self, from: data)
+    }
+
+    func createTemplate(_ payload: TemplateCreate) async throws -> TemplateOut {
+        let request = try makeJSONRequest(
+            path: "templates",
+            method: "POST",
+            body: payload
+        )
+        let (data, response) = try await perform(request, authenticated: true)
+        try validate(response, expectedStatus: 201)
+        return try decode(TemplateOut.self, from: data)
+    }
+
+    func patchTemplate(
+        id: UUID,
+        _ payload: TemplatePatch
+    ) async throws -> TemplateOut {
+        let request = try makeJSONRequest(
+            path: "templates/\(id.uuidString.lowercased())",
+            method: "PATCH",
+            body: payload
+        )
+        let (data, response) = try await perform(request, authenticated: true)
+        try validate(response, expectedStatus: 200)
+        return try decode(TemplateOut.self, from: data)
+    }
+
+    func cloneTemplate(
+        id: UUID,
+        _ payload: TemplateClone?
+    ) async throws -> TemplateOut {
+        let path = "templates/\(id.uuidString.lowercased())/clone"
+        let request: URLRequest
+        if let payload {
+            request = try makeJSONRequest(path: path, method: "POST", body: payload)
+        } else {
+            request = try makeRequest(path: path, method: "POST")
+        }
+        let (data, response) = try await perform(request, authenticated: true)
+        try validate(response, expectedStatus: 201)
+        return try decode(TemplateOut.self, from: data)
+    }
+
     func upload(to url: URL, fileURL: URL, contentType: String) async throws {
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = "PUT"
@@ -89,17 +161,10 @@ struct APIClient {
         request.setValue("no-cache, no-store", forHTTPHeaderField: "Cache-Control")
         request.setValue("no-cache", forHTTPHeaderField: "Pragma")
 
-        let response: URLResponse
-        do {
-            (_, response) = try await session.upload(for: request, fromFile: fileURL)
-        } catch is URLError {
-            throw AppError.network
-        } catch {
-            throw AppError.unknown
-        }
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AppError.unknown
-        }
+        let (_, httpResponse) = try await sendUpload(
+            request,
+            fromFile: fileURL
+        )
         switch httpResponse.statusCode {
         case 200...299:
             return
@@ -198,19 +263,38 @@ struct APIClient {
     }
 
     private func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let data: Data
-        let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
-        } catch is URLError {
-            throw AppError.network
+            let (data, response) = try await session.data(for: request)
+            return (data, try requireHTTPResponse(response))
         } catch {
-            throw AppError.unknown
+            throw transportFailure(error)
         }
+    }
+
+    private func sendUpload(
+        _ request: URLRequest,
+        fromFile fileURL: URL
+    ) async throws -> (Data, HTTPURLResponse) {
+        do {
+            let (data, response) = try await session.upload(
+                for: request,
+                fromFile: fileURL
+            )
+            return (data, try requireHTTPResponse(response))
+        } catch {
+            throw transportFailure(error)
+        }
+    }
+
+    private func requireHTTPResponse(_ response: URLResponse) throws -> HTTPURLResponse {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AppError.unknown
         }
-        return (data, httpResponse)
+        return httpResponse
+    }
+
+    private func transportFailure(_ error: Error) -> AppError {
+        error is URLError ? .network : .unknown
     }
 
     private func validate(

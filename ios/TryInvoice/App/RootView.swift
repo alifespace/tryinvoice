@@ -42,6 +42,19 @@ struct RootView: View {
                             }
                             .accessibilityIdentifier("home.capture")
                         }
+                        if let reviewServices = environment.reviewServices,
+                           let store = environment.captureStore {
+                            NavigationLink("复核") {
+                                BatchListView(store: store, services: reviewServices)
+                            }
+                            .accessibilityIdentifier("home.review")
+                        }
+                        if let reviewServices = environment.reviewServices {
+                            NavigationLink("模板") {
+                                TemplateListView(api: reviewServices.templateAPI)
+                            }
+                            .accessibilityIdentifier("home.templates")
+                        }
                         if let error = viewModel.displayError {
                             Text(error.userMessage)
                                 .font(.callout)

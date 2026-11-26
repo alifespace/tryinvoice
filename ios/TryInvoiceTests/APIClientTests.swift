@@ -205,6 +205,122 @@ final class APIClientTests: XCTestCase {
         }
     }
 
+    func testListTransactionsDecodesThreeLevelGroupsAndAlerts() async throws {
+        URLProtocolStub.install { _ in .response(statusCode: 200, body: Self.transactionListJSON) }
+        let client = makeClient(provider: StubTokenProvider(accessTokens: ["synthetic-token"]))
+        let batchId = try XCTUnwrap(UUID(uuidString: "44444444-4444-4444-4444-444444444444"))
+
+        let list = try await client.listTransactions(batchId: batchId)
+        let request = try XCTUnwrap(URLProtocolStub.lastRequest)
+
+        XCTAssertEqual(request.url?.path, "/api/v1/batches/44444444-4444-4444-4444-444444444444/transactions")
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-token")
+        XCTAssertEqual(list.missingAlerts.count, 1)
+        XCTAssertEqual(list.groups.first?.category, "meal")
+        let transaction = try XCTUnwrap(list.groups.first?.scopes.first?.regions.first?.transactions.first)
+        XCTAssertEqual(transaction.claimAmount, "120.00")
+        XCTAssertEqual(transaction.documents.first?.role, "invoice")
+    }
+
+    func testUpdateTransactionSendsPatchWithOnlySetFields() async throws {
+        URLProtocolStub.install { _ in .response(statusCode: 200, body: Self.transactionOutJSON) }
+        let client = makeClient(provider: StubTokenProvider(accessTokens: ["synthetic-token"]))
+        let patch = TransactionPatch(
+            category: nil, invoiceDocId: nil, notes: "Synthetic note",
+            receiptDocId: nil, splitCount: 3, tipAmount: .string("0.00")
+        )
+
+        let updated = try await client.updateTransaction(id: Self.transactionId, patch)
+        let request = try XCTUnwrap(URLProtocolStub.lastRequest)
+        XCTAssertEqual(request.url?.path, "/api/v1/transactions/22222222-2222-2222-2222-222222222222")
+        XCTAssertEqual(request.httpMethod, "PATCH")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-token")
+        let object = try Self.jsonObject(from: request)
+        XCTAssertEqual(Set(object.keys), ["notes", "split_count", "tip_amount"])
+        XCTAssertEqual(updated.merchant, "Synthetic cafe")
+    }
+
+    func testTemplateListAndCreateFollowContract() async throws {
+        let recorder = ResponseSequence([
+            .response(statusCode: 200, body: "[\(Self.templateOutJSON)]"),
+            .response(statusCode: 201, body: Self.templateOutJSON),
+        ])
+        URLProtocolStub.install { _ in recorder.next() }
+        let client = makeClient(provider: StubTokenProvider(accessTokens: ["synthetic-token"]))
+        let rules = try JSONDecoder().decode(RuleTemplateDSL.self, from: Data(Self.ruleDSLJSON.utf8))
+
+        let templates = try await client.listTemplates()
+        XCTAssertEqual(templates.map(\.name), ["Synthetic template"])
+        XCTAssertEqual(URLProtocolStub.lastRequest?.url?.path, "/api/v1/templates")
+        XCTAssertEqual(URLProtocolStub.lastRequest?.httpMethod, "GET")
+        XCTAssertEqual(URLProtocolStub.lastRequest?.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-token")
+
+        _ = try await client.createTemplate(TemplateCreate(description: nil, name: "Copy", rules: rules))
+        let request = try XCTUnwrap(URLProtocolStub.lastRequest)
+        let object = try Self.jsonObject(from: request)
+        XCTAssertEqual(request.url?.path, "/api/v1/templates")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-token")
+        XCTAssertEqual(object["name"] as? String, "Copy")
+        XCTAssertEqual((object["rules"] as? [String: Any])?["template_code"] as? String, "synthetic_tpl")
+    }
+
+    func testPatchTemplateOmitsNilFieldsAndCloneAllowsEmptyBody() async throws {
+        let recorder = ResponseSequence([
+            .response(statusCode: 200, body: Self.templateOutJSON),
+            .response(statusCode: 201, body: Self.templateOutJSON),
+        ])
+        URLProtocolStub.install { _ in recorder.next() }
+        let client = makeClient(provider: StubTokenProvider(accessTokens: ["synthetic-token"]))
+
+        _ = try await client.patchTemplate(
+            id: Self.templateId,
+            TemplatePatch(description: nil, name: "Synthetic rename", rules: nil)
+        )
+        var request = try XCTUnwrap(URLProtocolStub.lastRequest)
+        XCTAssertEqual(request.url?.path, "/api/v1/templates/11111111-1111-1111-1111-111111111111")
+        XCTAssertEqual(request.httpMethod, "PATCH")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-token")
+        let patched = try Self.jsonObject(from: request)
+        XCTAssertEqual(Set(patched.keys), ["name"])
+
+        let cloned = try await client.cloneTemplate(id: Self.templateId, nil)
+        request = try XCTUnwrap(URLProtocolStub.lastRequest)
+        XCTAssertEqual(request.url?.path, "/api/v1/templates/11111111-1111-1111-1111-111111111111/clone")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-token")
+        XCTAssertNil(request.httpBody)
+        XCTAssertNil(request.value(forHTTPHeaderField: "Content-Type"))
+        XCTAssertEqual(cloned.name, "Synthetic template")
+    }
+
+    func testReviewStatusesMapToExistingSafeErrors() async throws {
+        let mappings: [(Int, AppError)] = [(404, .unknown), (409, .unknown), (422, .validation)]
+        for (statusCode, expected) in mappings {
+            URLProtocolStub.install { _ in .response(statusCode: statusCode, body: #"{"detail":"private"}"#) }
+            let client = makeClient(provider: StubTokenProvider(accessTokens: ["synthetic-token"]))
+            do {
+                _ = try await client.updateTransaction(id: Self.transactionId, Self.emptyPatch)
+                XCTFail("Expected mapped HTTP error for \(statusCode)")
+            } catch let error as AppError {
+                XCTAssertEqual(error, expected)
+                XCTAssertFalse(error.userMessage.contains("private"))
+            } catch {
+                XCTFail("Unexpected error type for \(statusCode)")
+            }
+        }
+    }
+
+    private static let transactionId = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+    private static let templateId = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+    private static let emptyPatch = TransactionPatch(category: nil, invoiceDocId: nil, notes: nil, receiptDocId: nil, splitCount: nil, tipAmount: nil)
+
+    private static func jsonObject(from request: URLRequest) throws -> [String: Any] {
+        let body = try XCTUnwrap(request.httpBody)
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    }
+
     private func makeClient(
         provider: StubTokenProvider,
         baseURL: URL = URL(string: "https://example.test")!,
@@ -226,6 +342,22 @@ final class APIClientTests: XCTestCase {
 
     private static let batchOutJSON = """
     {"id":"batch-1","template_id":"template-1","expense_type":"meal","title":"Synthetic batch","batch_date":"2026-11-22","trip_start_date":null,"trip_end_date":null,"destinations":[],"status":"draft","missing_alerts":[],"created_at":"2026-11-22T10:00:00Z","updated_at":"2026-11-22T10:00:00Z"}
+    """
+
+    private static let transactionOutJSON = """
+    {"id":"22222222-2222-2222-2222-222222222222","category":"meal","merchant":"Synthetic cafe","tx_date":"2026-11-22","region_scope":"in_scope","region_detail":"cn","currency":"CNY","original_amount":"120.00","claim_amount":"120.00","tip_amount":"0.00","split_count":2,"payment_status":"paid","airport_direction":null,"airport_iata":null,"flags":["meal_split"],"notes":"","is_user_verified":false,"documents":[{"id":"33333333-3333-3333-3333-333333333333","role":"invoice","original_filename":"invoice.pdf"}]}
+    """
+
+    private static let transactionListJSON = """
+    {"batch_id":"44444444-4444-4444-4444-444444444444","status":"review","missing_alerts":[{"code":"missing_receipt","transaction_id":"22222222-2222-2222-2222-222222222222"}],"groups":[{"category":"meal","scopes":[{"region_scope":"in_scope","regions":[{"region_detail":"cn","transactions":[\(transactionOutJSON)]}]}]}]}
+    """
+
+    private static let ruleDSLJSON = """
+    {"schema_version":"1.0","template_code":"synthetic_tpl","expense_types":[{"code":"meal","label":"Meal","require_trip_reference":false}],"categories":[{"code":"meal","label":"Meal","group":"living"}],"region_hierarchy":{"in_scope":{"label":"In","regions":[{"code":"cn","label":"China","currencies":["CNY"]}]},"out_of_scope":{"label":"Out","regions":[{"code":"sg","label":"Singapore","currencies":["SGD"]}]},"preserve_original_currency":true},"compliance_rules":{"require_invoice_payment_closure":true,"transit_direct_pay_exemptions":["taxi"],"meal_split_for_multiple_diners":true,"exclude_ride_hailing_tips":{"enabled":true,"providers":["didi"],"highlight_flag":"tip"},"timezone_tolerance_days":2,"check_missing_airport_transfers":true,"deduplicate_reshot_receipts":true,"filter_irrelevant_files":true},"naming_and_export":{"standard_pattern":"{date}","airport_transfer_pattern":"{iata}","excel_group_levels":["category_group"],"excel_filename_pattern":"expense.xlsx"}}
+    """
+
+    private static let templateOutJSON = """
+    {"id":"11111111-1111-1111-1111-111111111111","name":"Synthetic template","description":"Synthetic","schema_version":"1.0","is_system_default":false,"rules":\(ruleDSLJSON),"created_at":"2026-11-22T10:00:00Z","updated_at":"2026-11-22T10:00:00Z"}
     """
 }
 

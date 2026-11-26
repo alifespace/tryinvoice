@@ -223,4 +223,43 @@ final class LocalStoreTests: XCTestCase {
             1
         )
     }
+
+    /// 复核页只读接口：仅返回已回填服务端 ID 的批次，并按创建时间倒序；文档按服务端 ID 查路径。
+    @MainActor
+    func testSyncedBatchesAndDocumentPathLookupsAreReadOnly() throws {
+        let store = try makeStore()
+        let older = LocalBatch(
+            serverId: UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            title: "Synthetic older", expenseType: "meal", templateId: UUID(),
+            batchDate: "2026-11-20", createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let newer = LocalBatch(
+            serverId: UUID(uuidString: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+            title: "Synthetic newer", expenseType: "meal", templateId: UUID(),
+            batchDate: "2026-11-21", createdAt: Date(timeIntervalSince1970: 200)
+        )
+        let localOnly = LocalBatch(
+            title: "Synthetic local", expenseType: "meal", templateId: UUID(),
+            batchDate: "2026-11-22", createdAt: Date(timeIntervalSince1970: 300)
+        )
+        for batch in [older, newer, localOnly] {
+            store.container.mainContext.insert(batch)
+        }
+
+        let document = LocalDocument(
+            serverDocumentId: UUID(uuidString: "cccccccc-cccc-cccc-cccc-cccccccccccc"),
+            relativePath: "batch/doc.jpg", sha256: String(repeating: "a", count: 64),
+            sizeBytes: 9, mimeType: "image/jpeg", originalName: "synthetic.jpg"
+        )
+        document.batch = newer
+        store.container.mainContext.insert(document)
+        try store.container.mainContext.save()
+
+        XCTAssertEqual(store.syncedBatches().map(\.title), ["Synthetic newer", "Synthetic older"])
+        XCTAssertEqual(
+            store.relativePath(forServerDocumentId: UUID(uuidString: "cccccccc-cccc-cccc-cccc-cccccccccccc")!),
+            "batch/doc.jpg"
+        )
+        XCTAssertNil(store.relativePath(forServerDocumentId: UUID()))
+    }
 }

@@ -104,6 +104,39 @@ final class LocalStore {
             }
     }
 
+    /// 只读：已回填服务端 ID 的批次，按创建时间倒序。
+    func syncedBatches() -> [LocalBatch] {
+        guard let batches = try? context.fetch(FetchDescriptor<LocalBatch>()) else {
+            return []
+        }
+        return batches
+            .filter { $0.serverId != nil }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// 只读：某批次已回填服务端 ID 的文档，按创建时间升序；供复核页关联候选使用。
+    func linkCandidates(forBatchServerId id: UUID) -> [(id: UUID, name: String)] {
+        guard let documents = try? context.fetch(FetchDescriptor<LocalDocument>()) else {
+            return []
+        }
+        return documents
+            .filter { $0.batch?.serverId == id && $0.serverDocumentId != nil }
+            .sorted {
+                ($0.createdAt, $0.id.uuidString) < ($1.createdAt, $1.id.uuidString)
+            }
+            .compactMap { document in
+                document.serverDocumentId.map { (id: $0, name: document.originalName) }
+            }
+    }
+
+    /// 只读：按服务端文档 ID 查本地原件相对路径；不写盘、不删除。
+    func relativePath(forServerDocumentId id: UUID) -> String? {
+        guard let documents = try? context.fetch(FetchDescriptor<LocalDocument>()) else {
+            return nil
+        }
+        return documents.first { $0.serverDocumentId == id }?.relativePath
+    }
+
     func apply(
         _ event: UploadEvent,
         to document: LocalDocument,

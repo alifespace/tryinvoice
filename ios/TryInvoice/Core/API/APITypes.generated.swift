@@ -107,6 +107,39 @@ struct BatchPage: Codable, Equatable, Sendable {
     let total: Int
 }
 
+struct Category: Codable, Equatable, Sendable {
+    let code: String
+    let group: String
+    let label: String
+}
+
+struct CategoryGroup: Codable, Equatable, Sendable {
+    let category: String
+    let scopes: [ScopeGroup]
+}
+
+struct ComplianceRules: Codable, Equatable, Sendable {
+    let checkMissingAirportTransfers: Bool
+    let deduplicateReshotReceipts: Bool
+    let excludeRideHailingTips: TipExclusion
+    let filterIrrelevantFiles: Bool
+    let mealSplitForMultipleDiners: Bool
+    let requireInvoicePaymentClosure: Bool
+    let timezoneToleranceDays: Int
+    let transitDirectPayExemptions: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case checkMissingAirportTransfers = "check_missing_airport_transfers"
+        case deduplicateReshotReceipts = "deduplicate_reshot_receipts"
+        case excludeRideHailingTips = "exclude_ride_hailing_tips"
+        case filterIrrelevantFiles = "filter_irrelevant_files"
+        case mealSplitForMultipleDiners = "meal_split_for_multiple_diners"
+        case requireInvoicePaymentClosure = "require_invoice_payment_closure"
+        case timezoneToleranceDays = "timezone_tolerance_days"
+        case transitDirectPayExemptions = "transit_direct_pay_exemptions"
+    }
+}
+
 struct ConfirmRequest: Codable, Equatable, Sendable {
     let clientOcrJson: JSONValue?
     let documentId: String
@@ -149,8 +182,34 @@ struct DocumentOut: Codable, Equatable, Sendable {
     }
 }
 
+struct ExpenseType: Codable, Equatable, Sendable {
+    let code: String
+    let label: String
+    let requireTripReference: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case code
+        case label
+        case requireTripReference = "require_trip_reference"
+    }
+}
+
 struct HTTPValidationError: Codable, Equatable, Sendable {
     let detail: [ValidationError]?
+}
+
+struct NamingAndExport: Codable, Equatable, Sendable {
+    let airportTransferPattern: String
+    let excelFilenamePattern: String
+    let excelGroupLevels: [String]
+    let standardPattern: String
+
+    enum CodingKeys: String, CodingKey {
+        case airportTransferPattern = "airport_transfer_pattern"
+        case excelFilenamePattern = "excel_filename_pattern"
+        case excelGroupLevels = "excel_group_levels"
+        case standardPattern = "standard_pattern"
+    }
 }
 
 struct PresignRequest: Codable, Equatable, Sendable {
@@ -178,6 +237,205 @@ struct PresignResponse: Codable, Equatable, Sendable {
         case expiresIn = "expires_in"
         case uploadMethod = "upload_method"
         case uploadUrl = "upload_url"
+    }
+}
+
+struct Region: Codable, Equatable, Sendable {
+    let code: String
+    let currencies: [String]
+    let label: String
+}
+
+struct RegionGroup: Codable, Equatable, Sendable {
+    let regionDetail: String
+    let transactions: [TransactionOut]
+
+    enum CodingKeys: String, CodingKey {
+        case regionDetail = "region_detail"
+        case transactions
+    }
+}
+
+struct RegionHierarchy: Codable, Equatable, Sendable {
+    let inScope: RegionScope
+    let outOfScope: RegionScope
+    let preserveOriginalCurrency: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case inScope = "in_scope"
+        case outOfScope = "out_of_scope"
+        case preserveOriginalCurrency = "preserve_original_currency"
+    }
+}
+
+struct RegionScope: Codable, Equatable, Sendable {
+    let label: String
+    let regions: [Region]
+}
+
+struct RuleTemplateDSL: Codable, Equatable, Sendable {
+    let categories: [Category]
+    let complianceRules: ComplianceRules
+    let expenseTypes: [ExpenseType]
+    let namingAndExport: NamingAndExport
+    let regionHierarchy: RegionHierarchy
+    let schemaVersion: String
+    let templateCode: String
+
+    enum CodingKeys: String, CodingKey {
+        case categories
+        case complianceRules = "compliance_rules"
+        case expenseTypes = "expense_types"
+        case namingAndExport = "naming_and_export"
+        case regionHierarchy = "region_hierarchy"
+        case schemaVersion = "schema_version"
+        case templateCode = "template_code"
+    }
+}
+
+struct ScopeGroup: Codable, Equatable, Sendable {
+    let regionScope: String
+    let regions: [RegionGroup]
+
+    enum CodingKeys: String, CodingKey {
+        case regionScope = "region_scope"
+        case regions
+    }
+}
+
+struct TemplateClone: Codable, Equatable, Sendable {
+    let name: String?
+}
+
+struct TemplateCreate: Codable, Equatable, Sendable {
+    let description: String?
+    let name: String
+    let rules: RuleTemplateDSL
+}
+
+struct TemplateOut: Codable, Equatable, Sendable {
+    let createdAt: String
+    let description: String
+    let id: String
+    let isSystemDefault: Bool
+    let name: String
+    let rules: RuleTemplateDSL
+    let schemaVersion: String
+    let updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case createdAt = "created_at"
+        case description
+        case id
+        case isSystemDefault = "is_system_default"
+        case name
+        case rules
+        case schemaVersion = "schema_version"
+        case updatedAt = "updated_at"
+    }
+}
+
+struct TemplatePatch: Codable, Equatable, Sendable {
+    let description: String?
+    let name: String?
+    let rules: RuleTemplateDSL?
+}
+
+struct TipExclusion: Codable, Equatable, Sendable {
+    let enabled: Bool
+    let highlightFlag: String
+    let providers: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case highlightFlag = "highlight_flag"
+        case providers
+    }
+}
+
+struct TransactionDocumentOut: Codable, Equatable, Sendable {
+    let id: String
+    let originalFilename: String
+    let role: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case originalFilename = "original_filename"
+        case role
+    }
+}
+
+struct TransactionListOut: Codable, Equatable, Sendable {
+    let batchId: String
+    let groups: [CategoryGroup]
+    let missingAlerts: [JSONValue]
+    let status: String
+
+    enum CodingKeys: String, CodingKey {
+        case batchId = "batch_id"
+        case groups
+        case missingAlerts = "missing_alerts"
+        case status
+    }
+}
+
+struct TransactionOut: Codable, Equatable, Sendable {
+    let airportDirection: String?
+    let airportIata: String?
+    let category: String
+    let claimAmount: String
+    let currency: String
+    let documents: [TransactionDocumentOut]
+    let flags: [String]
+    let id: String
+    let isUserVerified: Bool
+    let merchant: String
+    let notes: String
+    let originalAmount: String
+    let paymentStatus: String
+    let regionDetail: String
+    let regionScope: String
+    let splitCount: Int
+    let tipAmount: String
+    let txDate: String
+
+    enum CodingKeys: String, CodingKey {
+        case airportDirection = "airport_direction"
+        case airportIata = "airport_iata"
+        case category
+        case claimAmount = "claim_amount"
+        case currency
+        case documents
+        case flags
+        case id
+        case isUserVerified = "is_user_verified"
+        case merchant
+        case notes
+        case originalAmount = "original_amount"
+        case paymentStatus = "payment_status"
+        case regionDetail = "region_detail"
+        case regionScope = "region_scope"
+        case splitCount = "split_count"
+        case tipAmount = "tip_amount"
+        case txDate = "tx_date"
+    }
+}
+
+struct TransactionPatch: Codable, Equatable, Sendable {
+    let category: String?
+    let invoiceDocId: String?
+    let notes: String?
+    let receiptDocId: String?
+    let splitCount: Int?
+    let tipAmount: JSONValue?
+
+    enum CodingKeys: String, CodingKey {
+        case category
+        case invoiceDocId = "invoice_doc_id"
+        case notes
+        case receiptDocId = "receipt_doc_id"
+        case splitCount = "split_count"
+        case tipAmount = "tip_amount"
     }
 }
 

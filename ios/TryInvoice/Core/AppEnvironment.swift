@@ -10,6 +10,7 @@ struct AppEnvironment {
     let connectivity: (any ConnectivityMonitor)?
     let importPipeline: ImportPipeline?
     let captureStore: LocalStore?
+    let reviewServices: ReviewServices?
 
     init(
         configuration: AppConfiguration,
@@ -19,7 +20,8 @@ struct AppEnvironment {
         uploadQueue: UploadQueue? = nil,
         connectivity: (any ConnectivityMonitor)? = nil,
         importPipeline: ImportPipeline? = nil,
-        captureStore: LocalStore? = nil
+        captureStore: LocalStore? = nil,
+        reviewServices: ReviewServices? = nil
     ) {
         self.configuration = configuration
         self.error = nil
@@ -31,6 +33,7 @@ struct AppEnvironment {
         self.connectivity = connectivity
         self.importPipeline = importPipeline
         self.captureStore = captureStore
+        self.reviewServices = reviewServices
     }
 
 #if DEBUG
@@ -51,6 +54,7 @@ struct AppEnvironment {
             : nil
         self.importPipeline = capture?.pipeline
         self.captureStore = capture?.store
+        self.reviewServices = capture?.review
     }
 #endif
 
@@ -64,6 +68,7 @@ struct AppEnvironment {
         self.connectivity = nil
         self.importPipeline = nil
         self.captureStore = nil
+        self.reviewServices = nil
     }
 
     static func live(
@@ -105,6 +110,14 @@ struct AppEnvironment {
             let services = Thread.isMainThread
                 ? MainActor.assumeIsolated { makeUploadServices(api: apiClient) }
                 : nil
+            let reviewServices = services.map { upload in
+                ReviewServices(
+                    reviewAPI: apiClient,
+                    templateAPI: apiClient,
+                    images: StoreDocumentImageSource(store: upload.store),
+                    linkCandidates: StoreLinkCandidateSource(store: upload.store)
+                )
+            }
             return AppEnvironment(
                 configuration: configuration,
                 authService: authService,
@@ -112,7 +125,8 @@ struct AppEnvironment {
                 uploadQueue: services?.queue,
                 connectivity: services?.monitor,
                 importPipeline: services?.pipeline,
-                captureStore: services?.store
+                captureStore: services?.store,
+                reviewServices: reviewServices
             )
         case let .failure(error):
             return AppEnvironment(error: error)
@@ -145,7 +159,11 @@ struct AppEnvironment {
 #if DEBUG
     /// UI 测试用内存容器 + 临时 RawVault；装配失败返回 nil，不影响登录与首页启动。
     @MainActor
-    private static func makeUITestCaptureServices() -> (pipeline: ImportPipeline, store: LocalStore)? {
+    private static func makeUITestCaptureServices() -> (
+        pipeline: ImportPipeline,
+        store: LocalStore,
+        review: ReviewServices
+    )? {
         let vaultRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("TryInvoiceUITestVault-\(UUID().uuidString)", isDirectory: true)
         guard let container = try? LocalStore.makeContainer(storeURL: nil),
@@ -153,7 +171,25 @@ struct AppEnvironment {
             return nil
         }
         let store = LocalStore(container: container, vault: vault)
-        return (ImportPipeline(store: store, engine: VisionOCREngine()), store)
+        // 种入一条已回填服务端 ID 的合成批次，使复核入口在 UI 测试中可达。
+        if let batch = try? store.createBatch(
+            title: UITestReviewAPI.batchTitle,
+            expenseType: "meal",
+            templateId: UUID(),
+            batchDate: "2026-11-20"
+        ) {
+            _ = try? store.backfill(serverId: UITestReviewAPI.batchId, for: batch)
+        }
+        return (
+            ImportPipeline(store: store, engine: VisionOCREngine()),
+            store,
+            ReviewServices(
+                reviewAPI: UITestReviewAPI(),
+                templateAPI: UITestTemplateAPI(),
+                images: UITestImageSource(),
+                linkCandidates: UITestLinkCandidateSource()
+            )
+        )
     }
 #endif
 
