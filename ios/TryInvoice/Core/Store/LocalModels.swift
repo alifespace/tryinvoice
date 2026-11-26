@@ -45,6 +45,8 @@ final class LocalDocument {
     var stateRaw: String
     var attempt: Int
     var createdAt: Date
+    /// 端侧 OCR 结果的紧凑 JSON；缺失表示未识别或旧数据。
+    var ocrJSON: String?
     var batch: LocalBatch?
 
     var state: UploadState {
@@ -62,7 +64,8 @@ final class LocalDocument {
         originalName: String,
         state: UploadState = .pending,
         attempt: Int = 0,
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        ocrJSON: String? = nil
     ) {
         self.id = id
         self.serverDocumentId = serverDocumentId
@@ -74,5 +77,6 @@ final class LocalDocument {
         self.stateRaw = state.rawValue
         self.attempt = attempt
         self.createdAt = createdAt
+        self.ocrJSON = ocrJSON
     }
 }

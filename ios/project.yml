@@ -39,6 +39,7 @@ targets:
         API_BASE_URL: "$(API_BASE_URL)"
         SUPABASE_URL: "$(SUPABASE_URL)"
         SUPABASE_ANON_KEY: "$(SUPABASE_ANON_KEY)"
+        NSCameraUsageDescription: "用于扫描纸质票据并在本机生成离线记录。"
         UILaunchScreen: {}
   TryInvoiceTests:
     type: bundle.unit-test

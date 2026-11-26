@@ -309,6 +309,36 @@ final class UploadQueueTests: XCTestCase {
     private static let objectURL = "https://storage.example.test/object"
 
     @MainActor
+    func testConfirmCarriesStoredOCRJSONAndOmitsItWhenAbsent() async throws {
+        let store = try makeStore()
+        let batch = try makeBatch(store)
+        let ocrURL = root.appendingPathComponent("\(UUID().uuidString)-ocr.jpg")
+        try Data("ocr-bytes".utf8).write(to: ocrURL)
+        let withOCR = try store.addDocument(
+            to: batch, fileAt: ocrURL, originalName: "ocr.jpg",
+            ocrJSON: "{\"engine\":\"vision\",\"lines\":[]}"
+        )
+        let withoutOCR = try addDocument(store, batch, "plain.jpg", "plain-bytes")
+        let api = FakeUploadAPI(replies: [
+            .ready(documentId: UUID().uuidString, uploadURL: Self.objectURL),
+            .ready(documentId: UUID().uuidString, uploadURL: Self.objectURL),
+        ])
+
+        await UploadQueue(store: store, api: api).drain()
+
+        XCTAssertEqual(withOCR.state, .uploaded)
+        XCTAssertEqual(withoutOCR.state, .uploaded)
+        let confirms = await api.confirms
+        XCTAssertEqual(confirms.count, 2)
+        let ocrPayload = try XCTUnwrap(confirms.first { $0.filename == "ocr.jpg" })
+        XCTAssertEqual(ocrPayload.clientOcrJson, .object([
+            "engine": .string("vision"), "lines": .array([]),
+        ]))
+        let plainPayload = try XCTUnwrap(confirms.first { $0.filename == "plain.jpg" })
+        XCTAssertNil(plainPayload.clientOcrJson)
+    }
+
+    @MainActor
     private func makeStore() throws -> LocalStore {
         storeCount += 1
         let vault = try RawVault(root: root.appendingPathComponent("vault-\(storeCount)"))
@@ -380,6 +410,7 @@ private actor FakeUploadAPI: UploadAPI {
     private static let timestamp = "2026-11-22T00:00:00Z"
     private(set) var calls: [String] = []
     private(set) var uploadedBytes: [Data] = []
+    private(set) var confirms: [ConfirmRequest] = []
     private var replies: [Reply]
 
     init(replies: [Reply]) { self.replies = replies }
@@ -426,6 +457,7 @@ private actor FakeUploadAPI: UploadAPI {
 
     func confirm(batchId: UUID, _ payload: ConfirmRequest) async throws -> DocumentOut {
         calls.append("confirm")
+        confirms.append(payload)
         await Task.yield()
         return DocumentOut(
             batchId: batchId.uuidString.lowercased(), createdAt: Self.timestamp, docRole: "receipt",

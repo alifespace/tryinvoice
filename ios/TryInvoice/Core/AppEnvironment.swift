@@ -8,6 +8,8 @@ struct AppEnvironment {
     let authConfigurationError: AppError?
     let uploadQueue: UploadQueue?
     let connectivity: (any ConnectivityMonitor)?
+    let importPipeline: ImportPipeline?
+    let captureStore: LocalStore?
 
     init(
         configuration: AppConfiguration,
@@ -15,7 +17,9 @@ struct AppEnvironment {
         deleteAccount: (() async throws -> Void)? = nil,
         authConfigurationError: AppError? = nil,
         uploadQueue: UploadQueue? = nil,
-        connectivity: (any ConnectivityMonitor)? = nil
+        connectivity: (any ConnectivityMonitor)? = nil,
+        importPipeline: ImportPipeline? = nil,
+        captureStore: LocalStore? = nil
     ) {
         self.configuration = configuration
         self.error = nil
@@ -25,6 +29,8 @@ struct AppEnvironment {
             authConfigurationError ?? configuration.supabaseConfigurationError
         self.uploadQueue = uploadQueue
         self.connectivity = connectivity
+        self.importPipeline = importPipeline
+        self.captureStore = captureStore
     }
 
 #if DEBUG
@@ -40,6 +46,11 @@ struct AppEnvironment {
         self.authConfigurationError = nil
         self.uploadQueue = nil
         self.connectivity = nil
+        let capture = Thread.isMainThread
+            ? MainActor.assumeIsolated { Self.makeUITestCaptureServices() }
+            : nil
+        self.importPipeline = capture?.pipeline
+        self.captureStore = capture?.store
     }
 #endif
 
@@ -51,6 +62,8 @@ struct AppEnvironment {
         self.authConfigurationError = error
         self.uploadQueue = nil
         self.connectivity = nil
+        self.importPipeline = nil
+        self.captureStore = nil
     }
 
     static func live(
@@ -97,7 +110,9 @@ struct AppEnvironment {
                 authService: authService,
                 deleteAccount: { try await apiClient.deleteAccount() },
                 uploadQueue: services?.queue,
-                connectivity: services?.monitor
+                connectivity: services?.monitor,
+                importPipeline: services?.pipeline,
+                captureStore: services?.store
             )
         case let .failure(error):
             return AppEnvironment(error: error)
@@ -118,12 +133,29 @@ struct AppEnvironment {
             )
             return UploadServices(
                 queue: UploadQueue(store: store, api: api),
-                monitor: NWPathConnectivityMonitor()
+                monitor: NWPathConnectivityMonitor(),
+                store: store,
+                pipeline: ImportPipeline(store: store, engine: VisionOCREngine())
             )
         } catch {
             return nil
         }
     }
+
+#if DEBUG
+    /// UI 测试用内存容器 + 临时 RawVault；装配失败返回 nil，不影响登录与首页启动。
+    @MainActor
+    private static func makeUITestCaptureServices() -> (pipeline: ImportPipeline, store: LocalStore)? {
+        let vaultRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TryInvoiceUITestVault-\(UUID().uuidString)", isDirectory: true)
+        guard let container = try? LocalStore.makeContainer(storeURL: nil),
+              let vault = try? RawVault(root: vaultRoot) else {
+            return nil
+        }
+        let store = LocalStore(container: container, vault: vault)
+        return (ImportPipeline(store: store, engine: VisionOCREngine()), store)
+    }
+#endif
 
     private static var uploadStoreURL: URL? {
         FileManager.default
@@ -137,4 +169,6 @@ struct AppEnvironment {
 private struct UploadServices: Sendable {
     let queue: UploadQueue
     let monitor: any ConnectivityMonitor
+    let store: LocalStore
+    let pipeline: ImportPipeline
 }

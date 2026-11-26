@@ -68,7 +68,8 @@ final class LocalStore {
     func addDocument(
         to batch: LocalBatch,
         fileAt fileURL: URL,
-        originalName: String
+        originalName: String,
+        ocrJSON: String? = nil
     ) throws -> LocalDocument {
         let file = try vault.store(
             fileAt: fileURL,
@@ -83,7 +84,8 @@ final class LocalStore {
             sha256: file.sha256,
             sizeBytes: file.sizeBytes,
             mimeType: mimeType,
-            originalName: originalName
+            originalName: originalName,
+            ocrJSON: ocrJSON
         )
         document.batch = batch
         context.insert(document)

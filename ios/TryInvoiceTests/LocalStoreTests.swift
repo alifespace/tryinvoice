@@ -64,6 +64,28 @@ final class LocalStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testOCRJSONPersistsAndDefaultsToNil() throws {
+        do {
+            let store = try makeStore()
+            let batch = try makeBatch(store)
+            let withOCR = try store.addDocument(
+                to: batch, fileAt: try writeFile("ocr.jpg"), originalName: "ocr.jpg",
+                ocrJSON: "{\"lines\":[]}"
+            )
+            XCTAssertEqual(withOCR.ocrJSON, "{\"lines\":[]}")
+            let plain = try store.addDocument(
+                to: batch, fileAt: try writeFile("plain.jpg"), originalName: "plain.jpg"
+            )
+            XCTAssertNil(plain.ocrJSON)
+        }
+
+        let reopened = try makeStore()
+        let documents = try reopened.container.mainContext.fetch(FetchDescriptor<LocalDocument>())
+        XCTAssertEqual(documents.count, 2)
+        XCTAssertEqual(documents.filter { $0.ocrJSON != nil }.compactMap(\.ocrJSON), ["{\"lines\":[]}"])
+    }
+
+    @MainActor
     func testOfflineBatchAndDocumentsSurviveContainerRecreation() throws {
         var batchId: UUID!
         var documentIds: Set<UUID> = []
